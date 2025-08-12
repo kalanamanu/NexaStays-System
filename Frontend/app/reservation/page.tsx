@@ -26,7 +26,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CalendarIcon, Loader2 } from "lucide-react";
+import { CalendarIcon, Loader2, AlertTriangle, Info } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import NavBar from "@/components/nav-bar";
@@ -38,6 +38,22 @@ const ReservationPaymentForm = dynamic(
   () => import("@/components/ReservationPaymentForm"),
   { ssr: false }
 );
+
+// Price map for UI calculation
+const ROOM_PRICES: Record<string, number> = {
+  standard: 120,
+  deluxe: 180,
+  suite: 280,
+  residential: 450,
+};
+
+function getNights(arrival?: Date, departure?: Date) {
+  if (!arrival || !departure) return 1;
+  const nights = Math.ceil(
+    (departure.getTime() - arrival.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  return Math.max(nights, 1);
+}
 
 export default function ReservationPage() {
   const [formData, setFormData] = useState({
@@ -58,6 +74,11 @@ export default function ReservationPage() {
   const [reservationId, setReservationId] = useState<number | null>(null);
   const router = useRouter();
   const { toast } = useToast();
+
+  // --- UI Calculation for total amount
+  const nights = getNights(formData.arrivalDate, formData.departureDate);
+  const pricePerNight = ROOM_PRICES[formData.roomType] || 0;
+  const totalAmount = pricePerNight * nights;
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -91,33 +112,12 @@ export default function ReservationPage() {
     setIsLoading(true);
 
     try {
-      const totalAmount =
-        formData.roomType === "standard"
-          ? 120
-          : formData.roomType === "deluxe"
-          ? 180
-          : formData.roomType === "suite"
-          ? 280
-          : formData.roomType === "residential"
-          ? 450
-          : 100;
-      const nights =
-        formData.arrivalDate && formData.departureDate
-          ? Math.max(
-              1,
-              Math.ceil(
-                (formData.departureDate.getTime() -
-                  formData.arrivalDate.getTime()) /
-                  (1000 * 60 * 60 * 24)
-              )
-            )
-          : 1;
       const reqBody = {
         roomType: formData.roomType,
-        arrivalDate: formData.arrivalDate?.toISOString(), // ISO string
+        arrivalDate: formData.arrivalDate?.toISOString(),
         departureDate: formData.departureDate?.toISOString(),
         guests: formData.occupants,
-        totalAmount: totalAmount * nights,
+        totalAmount, // UI total
         skipCreditCard: formData.skipCreditCard,
         fullName: formData.fullName,
         email: formData.email,
@@ -125,7 +125,6 @@ export default function ReservationPage() {
       };
       const token = localStorage.getItem("token");
 
-      // Use full backend URL if on separate server
       const res = await fetch("http://localhost:5000/api/reservations", {
         method: "POST",
         headers: {
@@ -136,8 +135,6 @@ export default function ReservationPage() {
       });
 
       const data = await res.json();
-
-      // Debug: Log the entire response
       console.log("Reservation API result:", data);
 
       if (!res.ok) throw new Error(data.error || "Failed to make reservation");
@@ -151,14 +148,12 @@ export default function ReservationPage() {
         });
         router.push("/dashboard/customer");
       } else {
-        // Debug: Log clientSecret
         console.log("clientSecret from backend:", data.clientSecret);
 
         if (data.clientSecret) {
           setClientSecret(data.clientSecret);
           setShowPayment(true);
         } else {
-          // If clientSecret is missing, show error toast
           toast({
             title: "Error",
             description:
@@ -186,11 +181,6 @@ export default function ReservationPage() {
     setShowPayment(false);
     router.push("/dashboard/customer");
   };
-
-  // Debug: Log clientSecret each render
-  if (typeof window !== "undefined") {
-    console.log("Current clientSecret state:", clientSecret);
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
@@ -406,6 +396,17 @@ export default function ReservationPage() {
                       </div>
                     </div>
                   </div>
+                  {/* Total Amount */}
+                  <div className="my-6 p-4 rounded-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
+                    <span className="font-semibold text-lg">Total Amount</span>
+                    <span className="font-bold text-2xl text-green-700 dark:text-green-300">
+                      ${totalAmount}
+                    </span>
+                    <span className="text-gray-500 ml-4 text-sm">
+                      {nights} night{nights > 1 ? "s" : ""} x ${pricePerNight}
+                      /night
+                    </span>
+                  </div>
                   {/* Payment Details */}
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold">Payment Details</h3>
@@ -421,6 +422,38 @@ export default function ReservationPage() {
                         Skip credit card (pay at hotel)
                       </Label>
                     </div>
+                    {formData.skipCreditCard && (
+                      <div className="flex items-center bg-yellow-100 dark:bg-yellow-900 rounded-md px-3 py-2 mt-2 text-yellow-900 dark:text-yellow-100 text-sm">
+                        <AlertTriangle className="mr-2" size={18} />
+                        <span>
+                          Reservations without a credit card will be{" "}
+                          <b>automatically cancelled at 7:00 PM</b> on the day
+                          of arrival unless checked in. No-show customers will
+                          be billed for the reservation.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mb-6">
+                    <div className="flex items-center gap-2 mb-1 text-blue-700 dark:text-blue-200">
+                      <Info size={18} />
+                      <span className="font-semibold">Important policies:</span>
+                    </div>
+                    <ul className="list-disc ml-6 text-sm text-blue-900 dark:text-blue-100">
+                      <li>
+                        Reservations <b>without credit card</b> are
+                        auto-cancelled at <b>7 PM daily</b>.
+                      </li>
+                      <li>
+                        No-show customers are billed; a billing record is
+                        created for each no-show reservation by <b>7:00 PM</b>{" "}
+                        daily.
+                      </li>
+                      <li>
+                        A daily report is produced with total occupancy and
+                        revenue for the previous night.
+                      </li>
+                    </ul>
                   </div>
                   <Button
                     type="submit"
