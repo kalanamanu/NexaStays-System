@@ -20,10 +20,7 @@ type ReservationPaymentFormProps = {
 function CheckoutForm({
   clientSecret,
   onSuccess,
-}: {
-  clientSecret: string;
-  onSuccess: () => void;
-}) {
+}: ReservationPaymentFormProps) {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
@@ -35,7 +32,6 @@ function CheckoutForm({
 
     setLoading(true);
     setErrorMessage(null);
-
     const cardElement = elements.getElement(CardElement);
 
     if (!cardElement) {
@@ -46,9 +42,7 @@ function CheckoutForm({
 
     const { error, paymentIntent } = await stripe.confirmCardPayment(
       clientSecret,
-      {
-        payment_method: { card: cardElement },
-      }
+      { payment_method: { card: cardElement } }
     );
 
     setLoading(false);
@@ -63,37 +57,57 @@ function CheckoutForm({
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <CardElement
-        options={{
-          style: {
-            base: {
-              fontSize: "16px",
-              color: "#fff",
-              "::placeholder": { color: "#aab7c4" },
-            },
-            invalid: { color: "#fa755a" },
-          },
+    <form onSubmit={handleSubmit} style={{ width: "100%" }}>
+      <label
+        htmlFor="card-element"
+        style={{ fontWeight: 500, marginBottom: 8, display: "block" }}
+      >
+        Enter your Card details
+      </label>
+      <div
+        style={{
+          border: "1px solid #ddd",
+          padding: "14px 12px",
+          borderRadius: 6,
+          background: "#22223b",
+          marginBottom: 16,
+          minHeight: 48,
         }}
-      />
+      >
+        <CardElement
+          id="card-element"
+          options={{
+            style: {
+              base: {
+                fontSize: "16px",
+                color: "#fff",
+                "::placeholder": { color: "#aab7c4" },
+              },
+              invalid: { color: "#fa755a" },
+            },
+          }}
+        />
+      </div>
       <button
         type="submit"
         disabled={!stripe || loading}
         style={{
-          marginTop: "16px",
-          padding: "8px 24px",
+          marginTop: 4,
+          padding: "10px 32px",
           background: "#7c3aed",
           color: "#fff",
           border: "none",
           borderRadius: "4px",
           fontWeight: "bold",
+          fontSize: "16px",
           cursor: loading ? "wait" : "pointer",
+          width: "100%",
         }}
       >
         {loading ? "Processing..." : "Pay"}
       </button>
       {errorMessage && (
-        <div style={{ color: "red", marginTop: 8 }}>{errorMessage}</div>
+        <div style={{ color: "red", marginTop: 12 }}>{errorMessage}</div>
       )}
     </form>
   );
@@ -103,7 +117,6 @@ export default function ReservationPaymentForm({
   clientSecret,
   onSuccess,
 }: ReservationPaymentFormProps) {
-  // Prevent rendering if required data is missing
   if (!clientSecret || !process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
     return <div>Stripe is not configured properly.</div>;
   }
