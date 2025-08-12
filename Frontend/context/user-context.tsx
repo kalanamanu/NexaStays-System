@@ -1,106 +1,226 @@
 "use client";
 
-import type React from "react";
-import { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  ReactNode,
+} from "react";
 
-type UserRole = "customer" | "clerk" | "manager" | "travel-company";
+export type UserRole = "customer" | "clerk" | "manager" | "travel-company";
 
-interface User {
-  id: string;
-  name: string;
+export interface CustomerProfile {
+  id: number;
+  userId: number;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  country: string;
+  nic: string;
+  birthDay: string;
+  address: string;
+}
+
+export interface TravelCompanyProfile {
+  id: number;
+  userId: number;
+  companyName: string;
+  companyRegNo: string;
+  phone: string;
+  country: string;
+  address: string;
+}
+
+export interface User {
+  id: number;
   email: string;
   role: UserRole;
+  customerProfile?: CustomerProfile;
+  travelCompanyProfile?: TravelCompanyProfile;
 }
 
 interface UserContextType {
   user: User | null;
+  loading: boolean;
   login: (email: string, password: string, role: UserRole) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
   register: (
-    email: string,
-    password: string,
-    role: UserRole
+    formData: Record<string, any>
+  ) => Promise<{ success: boolean; message: string }>;
+  refreshUser: () => Promise<void>;
+  updateCustomerProfile: (
+    profileData: Partial<CustomerProfile>
   ) => Promise<boolean>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-export function UserProvider({ children }: { children: React.ReactNode }) {
+export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Check for stored user session
-    const storedUser = localStorage.getItem("hotel-user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+  const refreshUser = useCallback(async () => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const response = await fetch("http://localhost:5000/api/me", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data.user);
+        localStorage.setItem("hotel-user", JSON.stringify(data.user));
+      } else {
+        setUser(null);
+        localStorage.removeItem("hotel-user");
+        localStorage.removeItem("token");
+      }
+    } catch (err) {
+      setUser(null);
+      localStorage.removeItem("hotel-user");
+      localStorage.removeItem("token");
+    } finally {
+      setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedUser = localStorage.getItem("hotel-user");
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch {
+        setUser(null);
+        localStorage.removeItem("hotel-user");
+      }
+      setLoading(false);
+    } else {
+      const token = localStorage.getItem("token");
+      if (token) {
+        refreshUser();
+      } else {
+        setLoading(false);
+      }
+    }
+  }, [refreshUser]);
 
   const login = async (
     email: string,
     password: string,
     role: UserRole
   ): Promise<boolean> => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const response = await fetch("http://localhost:5000/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, role }),
+      });
+      const data = await response.json();
 
-    // Mock authentication - in real app, this would be an API call
-    if (email && password) {
-      const newUser: User = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: email.split("@")[0],
-        email,
-        role,
-      };
-      setUser(newUser);
-      localStorage.setItem("hotel-user", JSON.stringify(newUser));
-      return true;
+      if (response.ok && data.token && data.user) {
+        setUser(data.user);
+        localStorage.setItem("hotel-user", JSON.stringify(data.user));
+        localStorage.setItem("token", data.token);
+        return true;
+      } else {
+        return false;
+      }
+    } catch (err) {
+      return false;
     }
-    return false;
   };
 
-  // Register works the same as login in this mock, but you can add extra logic
   const register = async (
-    email: string,
-    password: string,
-    role: UserRole
-  ): Promise<boolean> => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    formData: Record<string, any>
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const response = await fetch("http://localhost:5000/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      const data = await response.json();
 
-    // Mock registration - in real app, this would be an API call
-    if (
-      email &&
-      password &&
-      (role === "customer" || role === "travel-company")
-    ) {
-      const newUser: User = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: email.split("@")[0],
-        email,
-        role,
-      };
-      setUser(newUser);
-      localStorage.setItem("hotel-user", JSON.stringify(newUser));
-      return true;
+      if (response.ok && data.user) {
+        // Optionally auto-login after register:
+        // await login(formData.email, formData.password, formData.role);
+        return { success: true, message: "Registered successfully" };
+      } else {
+        return {
+          success: false,
+          message: data.message || "Registration failed",
+        };
+      }
+    } catch (err) {
+      return { success: false, message: "Registration failed" };
     }
-    return false;
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem("hotel-user");
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("hotel-user");
+      localStorage.removeItem("token");
+    }
+  };
+
+  /**
+   * Update the current user's customer profile and refresh user context.
+   * Usage: await updateCustomerProfile({ firstName: "New", ... });
+   */
+  const updateCustomerProfile = async (
+    profileData: Partial<CustomerProfile>
+  ): Promise<boolean> => {
+    if (!user?.customerProfile?.id) return false;
+    const token = localStorage.getItem("token");
+    if (!token) return false;
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/customer-profile/${user.customerProfile.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(profileData),
+        }
+      );
+      if (res.ok) {
+        // Refetch the user to get the latest profile data
+        await refreshUser();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
   };
 
   return (
     <UserContext.Provider
       value={{
         user,
+        loading,
         login,
         logout,
         isAuthenticated: !!user,
         register,
+        refreshUser,
+        updateCustomerProfile,
       }}
     >
       {children}

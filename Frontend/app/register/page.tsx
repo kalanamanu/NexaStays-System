@@ -65,8 +65,6 @@ export default function RegisterPage() {
   const [companyCountry, setCompanyCountry] = useState("+94");
   const [companyPhone, setCompanyPhone] = useState("");
   const [companyAddress, setCompanyAddress] = useState("");
-
-  const { register } = useUser();
   const router = useRouter();
 
   // Validation helpers
@@ -129,16 +127,53 @@ export default function RegisterPage() {
 
     setIsLoading(true);
 
+    // Build the request body dynamically based on the role
+    let reqBody: any = {
+      email,
+      password,
+      role,
+    };
+
+    if (role === "customer") {
+      reqBody = {
+        ...reqBody,
+        firstName,
+        lastName,
+        customerPhone,
+        customerCountry,
+        nic,
+        birthDay,
+        address,
+      };
+    } else if (role === "travel-company") {
+      reqBody = {
+        ...reqBody,
+        companyName,
+        companyRegNo,
+        companyPhone,
+        companyCountry,
+        companyAddress,
+      };
+    }
+
     try {
-      // For demo, only email, password, and role are passed. You can expand your context to store extra fields.
-      const success = await register(email, password, role);
-      if (success) {
+      const response = await fetch("http://localhost:5000/api/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(reqBody),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
         setSuccess("Registration successful! Redirecting to login...");
         setTimeout(() => {
           router.push("/login");
         }, 1700);
       } else {
-        setError("Registration failed. Please try again.");
+        setError(data.message || "Registration failed. Please try again.");
       }
     } catch (err) {
       setError("An error occurred. Please try again.");
