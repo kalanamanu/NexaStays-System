@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-const authenticateToken = require("../middleware/authenticateToken");
+const { authenticateToken } = require("../middleware/authenticateToken");
 
 // Middleware to log incoming requests and user info for easier debugging
 router.use((req, res, next) => {

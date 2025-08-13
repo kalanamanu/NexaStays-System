@@ -27,3 +27,26 @@ router.get("/", async (req, res) => {
 });
 
 module.exports = router;
+
+//Get all the available rooms 
+router.get("/available", async (req, res) => {
+    try {
+        const rooms = await prisma.room.findMany({
+            where: { status: "available" },
+            orderBy: [
+                { type: "asc" },
+                { number: "asc" },
+            ],
+            select: {
+                id: true,
+                number: true,
+                type: true,
+                status: true,
+                pricePerNight: true,
+            }
+        });
+        res.json(rooms);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch available rooms" });
+    }
+});

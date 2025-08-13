@@ -68,6 +68,7 @@ import {
 type ReservationStatus =
   | "pending"
   | "confirmed"
+  | "pending_payment"
   | "checked-in"
   | "checked-out"
   | "no-show"
@@ -90,7 +91,6 @@ interface Reservation {
   createdAt: string;
   updatedAt: string;
 }
-
 interface Room {
   id: number;
   number: string;
@@ -110,10 +110,38 @@ interface Bill {
   total: number;
 }
 
+interface ReservationForm {
+  guestName: string;
+  email: string;
+  phoneNumber: string;
+  roomType: string;
+  roomNumber: string; // <-- Add this line
+  guests: number;
+  arrivalDate: string;
+  departureDate: string;
+  creditCard: string;
+  rateType: "nightly" | "weekly" | "monthly";
+}
+
 export default function ClerkDashboard() {
   const { user } = useUser();
   const router = useRouter();
   const { toast } = useToast();
+
+  const [form, setForm] = useState({
+    guestName: "",
+    email: "",
+    phoneNumber: "",
+    roomType: "",
+    roomNumber: "",
+    guests: 1,
+    arrivalDate: formatISO(new Date(), { representation: "date" }),
+    departureDate: formatISO(new Date(Date.now() + 86400000), {
+      representation: "date",
+    }),
+    creditCard: "",
+    rateType: "nightly" as "nightly" | "weekly" | "monthly",
+  });
 
   // State
   const [searchTerm, setSearchTerm] = useState("");
@@ -133,6 +161,7 @@ export default function ClerkDashboard() {
     email: "",
     phoneNumber: "",
     roomType: "",
+    roomNumber: "",
     guests: 1,
     arrivalDate: "",
     departureDate: "",
@@ -161,88 +190,196 @@ export default function ClerkDashboard() {
   //Get all available rooms
   useEffect(() => {
     async function fetchRooms() {
-      try {
-        const res = await fetch("http://localhost:5000/api/rooms");
-        const data = await res.json();
-        setRooms(data);
-        setAvailableRooms(
-          data.filter((room: Room) => room.status === "available")
-        );
-      } catch (err) {
-        setRooms([]);
-        setAvailableRooms([]);
-      }
+      const res = await fetch("http://localhost:5000/api/rooms/available");
+      const data = await res.json();
+      setAvailableRooms(data);
+      setRooms(data); // Optionally setRooms if you want to use all rooms elsewhere
     }
     fetchRooms();
   }, []);
 
-  // Demo data
-  const [reservations, setReservations] = useState<Reservation[]>([
-    {
-      id: "RES001",
-      guestName: "John Doe",
-      email: "john@example.com",
-      phoneNumber: "555-123-4567",
-      roomType: "Deluxe",
-      roomNumber: "201",
-      arrivalDate: "2025-08-13",
-      departureDate: "2025-08-16",
-      status: "confirmed",
-      guests: 2,
-      totalAmount: 540,
-      creditCard: "VISA ****1234",
-      rateType: "nightly",
-      createdAt: "2025-08-10T10:00:00Z",
-      updatedAt: "2025-08-10T10:00:00Z",
-    },
-    {
-      id: "RES002",
-      guestName: "Jane Smith",
-      email: "jane@example.com",
-      phoneNumber: "555-222-3333",
-      roomType: "Residential Suite",
-      arrivalDate: "2025-08-13",
-      departureDate: "2025-08-20",
-      status: "pending",
-      guests: 2,
-      totalAmount: 2700,
-      rateType: "weekly",
-      creditCard: "",
-      createdAt: "2025-08-10T12:00:00Z",
-      updatedAt: "2025-08-10T12:00:00Z",
-    },
-    {
-      id: "RES003",
-      guestName: "Mark Brown",
-      email: "mark@example.com",
-      phoneNumber: "555-987-6543",
-      roomType: "Standard",
-      arrivalDate: "2025-08-12",
-      departureDate: "2025-08-13",
-      status: "checked-in",
-      roomNumber: "101",
+  function openWalkInDialog() {
+    setWalkInMode(true);
+    setForm({
+      guestName: "",
+      email: "",
+      phoneNumber: "",
+      roomType: availableRooms[0]?.type || "",
+      roomNumber: availableRooms[0]?.number || "",
       guests: 1,
-      totalAmount: 120,
+      arrivalDate: formatISO(new Date(), { representation: "date" }),
+      departureDate: formatISO(new Date(Date.now() + 86400000), {
+        representation: "date",
+      }),
+      creditCard: "",
       rateType: "nightly",
-      createdAt: "2025-08-10T13:00:00Z",
-      updatedAt: "2025-08-12T15:00:00Z",
-    },
-    {
-      id: "RES004",
-      guestName: "Lucy Green",
-      email: "lucy@example.com",
-      phoneNumber: "555-444-1234",
-      roomType: "Suite",
-      arrivalDate: "2025-08-11",
-      departureDate: "2025-08-13",
-      status: "no-show",
-      guests: 2,
-      totalAmount: 420,
+    });
+    setShowReservationDialog(true);
+  }
+
+  function openReservationDialog() {
+    setWalkInMode(false);
+    setForm({
+      guestName: "",
+      email: "",
+      phoneNumber: "",
+      roomType: "",
+      roomNumber: "",
+      guests: 1,
+      arrivalDate: formatISO(new Date(), { representation: "date" }),
+      departureDate: formatISO(new Date(Date.now() + 86400000), {
+        representation: "date",
+      }),
+      creditCard: "",
       rateType: "nightly",
-      createdAt: "2025-08-10T14:00:00Z",
-      updatedAt: "2025-08-11T20:00:00Z",
-    },
-  ]);
+    });
+    setShowReservationDialog(true);
+  }
+
+  // Demo data
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [loadingReservations, setLoadingReservations] = useState(false);
+  const [reservationError, setReservationError] = useState<string | null>(null);
+
+  //Get all reservations
+  useEffect(() => {
+    async function fetchAllReservations() {
+      setLoadingReservations(true);
+      setReservationError(null);
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("http://localhost:5000/api/reservations/all", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        if (!res.ok) throw new Error("Failed to fetch reservations");
+        const data = await res.json();
+        setReservations(data.reservations);
+      } catch (err: any) {
+        setReservationError(err.message || "Failed to load reservations.");
+      } finally {
+        setLoadingReservations(false);
+      }
+    }
+    fetchAllReservations();
+  }, []);
+
+  // ---- Form change handler ----
+  function handleFormChange(field: string, value: string | number) {
+    // Handle auto departure for Residential Suite
+    let arrival = form.arrivalDate;
+    let departure = form.departureDate;
+    let rateType = form.rateType;
+    if (field === "arrivalDate") {
+      arrival = value as string;
+      if (
+        form.roomType === "Residential Suite" &&
+        form.rateType !== "nightly"
+      ) {
+        if (form.rateType === "weekly")
+          departure = formatISO(addWeeks(new Date(arrival), 1), {
+            representation: "date",
+          });
+        else if (form.rateType === "monthly")
+          departure = formatISO(addMonths(new Date(arrival), 1), {
+            representation: "date",
+          });
+      }
+    }
+    if (field === "rateType") {
+      rateType = value as "nightly" | "weekly" | "monthly";
+      if (
+        form.roomType === "Residential Suite" &&
+        (value === "weekly" || value === "monthly")
+      ) {
+        if (form.arrivalDate) {
+          if (value === "weekly")
+            departure = formatISO(addWeeks(new Date(form.arrivalDate), 1), {
+              representation: "date",
+            });
+          else if (value === "monthly")
+            departure = formatISO(addMonths(new Date(form.arrivalDate), 1), {
+              representation: "date",
+            });
+        }
+      }
+    }
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+      arrivalDate: arrival,
+      departureDate: departure,
+      rateType,
+    }));
+  }
+
+  // ---- Reservation submit handler ----
+  function handleSubmit() {
+    if (
+      !form.guestName ||
+      !form.phoneNumber ||
+      !form.arrivalDate ||
+      !form.departureDate
+    ) {
+      alert("Please fill required fields");
+      return;
+    }
+
+    let assignedRoomNumber = "";
+    let assignedRoomType = "";
+    let price = 0;
+
+    if (walkInMode) {
+      // Find selected room from availableRooms
+      const room = availableRooms.find(
+        (r) => r.number.toString() === form.roomNumber
+      );
+      if (!room) {
+        alert("Room not found");
+        return;
+      }
+      assignedRoomNumber = room.number;
+      assignedRoomType = room.type;
+      price = calculateRoomCharges(
+        room.pricePerNight,
+        form.arrivalDate,
+        form.departureDate,
+        form.rateType
+      );
+    } else {
+      assignedRoomType = form.roomType;
+      // For new reservation, assign just type, not number. Use any room's price for that type.
+      const room = rooms.find((r) => r.type === assignedRoomType);
+      price = calculateRoomCharges(
+        room?.pricePerNight || 0,
+        form.arrivalDate,
+        form.departureDate,
+        form.rateType
+      );
+    }
+
+    const res: Reservation = {
+      id: "RES" + Math.floor(Math.random() * 10000),
+      guestName: form.guestName,
+      email: form.email,
+      phoneNumber: form.phoneNumber,
+      roomType: assignedRoomType,
+      roomNumber: walkInMode ? assignedRoomNumber : undefined,
+      arrivalDate: form.arrivalDate,
+      departureDate: form.departureDate,
+      status: walkInMode ? "checked-in" : "confirmed",
+      guests: form.guests,
+      totalAmount: price,
+      rateType: form.rateType,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setReservations((prev) => [...prev, res]);
+    setShowReservationDialog(false);
+  }
 
   // Auto-cancel and no-show simulation: Mark reservations for today without credit card as auto-cancelled after 7 PM.
   useEffect(() => {
@@ -321,11 +458,10 @@ export default function ClerkDashboard() {
       email: "",
       phoneNumber: "",
       roomType: "",
+      roomNumber: "",
       guests: 1,
-      arrivalDate: formatISO(new Date(), { representation: "date" }),
-      departureDate: formatISO(new Date(Date.now() + 86400000), {
-        representation: "date",
-      }),
+      arrivalDate: "",
+      departureDate: "",
       creditCard: "",
       rateType: "nightly",
     });
@@ -337,12 +473,13 @@ export default function ClerkDashboard() {
       let arrival = prev.arrivalDate;
       let departure = prev.departureDate;
       let rateType = prev.rateType;
+
+      // If changing arrival date, recalculate departure for suite/week/month
       if (field === "arrivalDate") {
         arrival = value as string;
-        // If residential suite and non-nightly, auto-calculate departure
         if (
           prev.roomType === "Residential Suite" &&
-          prev.rateType !== "nightly"
+          (prev.rateType === "weekly" || prev.rateType === "monthly")
         ) {
           if (prev.rateType === "weekly") {
             departure = formatISO(addWeeks(new Date(arrival), 1), {
@@ -355,18 +492,20 @@ export default function ClerkDashboard() {
           }
         }
       }
+
+      // If changing rate type, recalculate departure for suite
       if (field === "rateType") {
         rateType = value as "nightly" | "weekly" | "monthly";
         if (
           prev.roomType === "Residential Suite" &&
-          (value === "weekly" || value === "monthly")
+          (rateType === "weekly" || rateType === "monthly")
         ) {
           if (prev.arrivalDate) {
-            if (value === "weekly") {
+            if (rateType === "weekly") {
               departure = formatISO(addWeeks(new Date(prev.arrivalDate), 1), {
                 representation: "date",
               });
-            } else if (value === "monthly") {
+            } else if (rateType === "monthly") {
               departure = formatISO(addMonths(new Date(prev.arrivalDate), 1), {
                 representation: "date",
               });
@@ -374,6 +513,8 @@ export default function ClerkDashboard() {
           }
         }
       }
+
+      // If changing room type to Residential Suite, default to weekly, auto-set departure
       if (field === "roomType" && value === "Residential Suite") {
         rateType = "weekly";
         if (prev.arrivalDate) {
@@ -382,9 +523,12 @@ export default function ClerkDashboard() {
           });
         }
       }
+
+      // If changing room type to anything else, reset rateType to nightly and use normal dates
       if (field === "roomType" && value !== "Residential Suite") {
         rateType = "nightly";
       }
+
       return {
         ...prev,
         [field]: value,
@@ -410,6 +554,12 @@ export default function ClerkDashboard() {
       });
       return;
     }
+    // Find nightly price for the selected room type
+    const room = availableRooms.find(
+      (r) => r.type === reservationForm.roomType
+    );
+    const nightlyPrice = room ? room.pricePerNight : 0;
+
     const newRes: Reservation = {
       id: `RES${Math.floor(Math.random() * 10000)}`,
       guestName: reservationForm.guestName,
@@ -424,10 +574,9 @@ export default function ClerkDashboard() {
         ? getAvailableRoomForType(reservationForm.roomType)
         : undefined,
       totalAmount: calculateRoomCharges(
-        reservationForm.roomType,
+        nightlyPrice,
         reservationForm.arrivalDate,
         reservationForm.departureDate,
-        reservationForm.guests,
         reservationForm.rateType
       ),
       creditCard: reservationForm.creditCard,
@@ -456,15 +605,16 @@ export default function ClerkDashboard() {
   function handleEditReservation(res: Reservation) {
     setEditingReservation(res);
     setReservationForm({
-      guestName: res.guestName,
-      email: res.email,
-      phoneNumber: res.phoneNumber ?? "",
-      roomType: res.roomType,
-      guests: res.guests,
-      arrivalDate: res.arrivalDate,
-      departureDate: res.departureDate,
-      creditCard: res.creditCard ?? "",
-      rateType: res.rateType ?? "nightly",
+      guestName: "",
+      email: "",
+      phoneNumber: "",
+      roomType: "",
+      roomNumber: "",
+      guests: 1,
+      arrivalDate: "",
+      departureDate: "",
+      creditCard: "",
+      rateType: "nightly",
     });
     setShowEditDialog(true);
   }
@@ -549,27 +699,20 @@ export default function ClerkDashboard() {
   }
 
   function calculateRoomCharges(
-    roomType: string,
+    nightlyPrice: number,
     arrival: string,
     departure: string,
-    guests: number,
     rateType: "nightly" | "weekly" | "monthly" = "nightly"
   ): number {
-    // Find a real room for this type
-    const room = rooms.find((r) => r.type === roomType);
-    const nightlyPrice = room?.pricePerNight ?? 0;
-
-    if (roomType === "Residential Suite" && rateType !== "nightly") {
-      if (rateType === "weekly") return nightlyPrice * 7;
-      if (rateType === "monthly") return nightlyPrice * 30;
-    }
-    // Nightly calculation
+    if (rateType === "weekly") return nightlyPrice * 7;
+    if (rateType === "monthly") return nightlyPrice * 30;
     const nights = Math.max(
       1,
       differenceInCalendarDays(new Date(departure), new Date(arrival))
     );
     return nights * nightlyPrice;
   }
+
   // Check-In Logic
   function handleAssignRoomAndCheckIn() {
     if (!selectedReservation || !selectedRoom) {
@@ -618,16 +761,20 @@ export default function ClerkDashboard() {
     // Find reservation
     const res = reservations.find((r) => r.id === selectedReservation);
     if (!res) return;
+
+    // Get room price for this reservation
+    const room = rooms.find((r) => r.type === res.roomType);
+    const nightlyPrice = room?.pricePerNight || 0;
+
     // Calculate late checkout
     let lateFee = 0;
     const scheduled = new Date(res.departureDate);
     const now = new Date();
     if (isAfter(now, scheduled)) {
       lateFee = calculateRoomCharges(
-        res.roomType,
+        nightlyPrice,
         res.departureDate,
         formatISO(now, { representation: "date" }),
-        res.guests,
         res.rateType
       );
     }
@@ -673,9 +820,13 @@ export default function ClerkDashboard() {
   // Filtering, coloring, helpers
   const filteredReservations = reservations.filter(
     (reservation) =>
-      reservation.guestName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reservation.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reservation.id.toLowerCase().includes(searchTerm.toLowerCase())
+      (reservation.guestName || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (reservation.email || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (reservation.id || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getStatusColor = (status: ReservationStatus) => {
@@ -698,6 +849,25 @@ export default function ClerkDashboard() {
   };
 
   if (!user) return null;
+
+  const dialogRoom = walkInMode
+    ? availableRooms.find(
+        (r) => r.number.toString() === reservationForm.roomNumber
+      )
+    : availableRooms.find((r) => r.type === reservationForm.roomType);
+  const dialogNightlyPrice = dialogRoom ? dialogRoom.pricePerNight : 0;
+  const showAmount =
+    reservationForm.arrivalDate &&
+    reservationForm.departureDate &&
+    (walkInMode ? reservationForm.roomNumber : reservationForm.roomType);
+  const estimatedAmount = showAmount
+    ? calculateRoomCharges(
+        dialogNightlyPrice,
+        reservationForm.arrivalDate,
+        reservationForm.departureDate,
+        reservationForm.rateType
+      )
+    : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
@@ -776,7 +946,8 @@ export default function ClerkDashboard() {
                               .filter(
                                 (r) =>
                                   r.status === "confirmed" ||
-                                  r.status === "pending"
+                                  r.status === "pending" ||
+                                  r.status === "pending_payment"
                               )
                               .map((reservation) => (
                                 <SelectItem
@@ -833,7 +1004,10 @@ export default function ClerkDashboard() {
                           </SelectTrigger>
                           <SelectContent>
                             {availableRooms.map((room) => (
-                              <SelectItem key={room.number} value={room.number}>
+                              <SelectItem
+                                key={room.number}
+                                value={room.number.toString()}
+                              >
                                 Room {room.number} - {room.type} ($
                                 {room.pricePerNight}/night)
                               </SelectItem>
@@ -1322,7 +1496,14 @@ export default function ClerkDashboard() {
         open={showReservationDialog}
         onOpenChange={setShowReservationDialog}
       >
-        <DialogContent>
+        <DialogContent
+          style={{
+            maxHeight: "90vh",
+            overflowY: "auto",
+            // Optional: for better appearance
+            minWidth: 350,
+          }}
+        >
           <DialogHeader>
             <DialogTitle>
               {walkInMode ? "Walk-In Check-In" : "New Reservation"}
@@ -1357,25 +1538,67 @@ export default function ClerkDashboard() {
               }
               placeholder="e.g. 555-123-4567"
             />
-            <Label>Room Type*</Label>
-            <Select
-              value={reservationForm.roomType}
-              onValueChange={(value) =>
-                handleReservationFormChange("roomType", value)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select room type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Standard">Standard</SelectItem>
-                <SelectItem value="Deluxe">Deluxe</SelectItem>
-                <SelectItem value="Suite">Suite</SelectItem>
-                <SelectItem value="Residential Suite">
-                  Residential Suite
-                </SelectItem>
-              </SelectContent>
-            </Select>
+
+            {/* Walk-In: Show room number selection */}
+            {walkInMode ? (
+              <>
+                <Label>Room*</Label>
+                <Select
+                  value={reservationForm.roomNumber}
+                  onValueChange={(value) => {
+                    handleReservationFormChange("roomNumber", value);
+                    // Set room type based on selected room number
+                    const room = availableRooms.find(
+                      (r) => r.number.toString() === value
+                    );
+                    if (room) {
+                      handleReservationFormChange("roomType", room.type);
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select room" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableRooms.map((room) => (
+                      <SelectItem
+                        key={room.number}
+                        value={room.number.toString()}
+                      >
+                        Room {room.number} - {room.type} (${room.pricePerNight}
+                        /night)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            ) : (
+              // New Reservation: Show room type selection
+              <>
+                <Label>Room Type*</Label>
+                <Select
+                  value={reservationForm.roomType}
+                  onValueChange={(value) =>
+                    handleReservationFormChange("roomType", value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select room type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[...new Set(availableRooms.map((r) => r.type))].map(
+                      (type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+
+            {/* If Residential Suite is picked, show rate type and adjust dates */}
             {reservationForm.roomType === "Residential Suite" && (
               <>
                 <Label>Rate Type*</Label>
@@ -1397,27 +1620,63 @@ export default function ClerkDashboard() {
                     <SelectItem value="nightly">Nightly</SelectItem>
                   </SelectContent>
                 </Select>
+                {/* For weekly/monthly, auto-calculate departure; for nightly, let user pick both */}
+                {reservationForm.rateType === "weekly" ||
+                reservationForm.rateType === "monthly" ? (
+                  <>
+                    <Label>Start Date*</Label>
+                    <Input
+                      type="date"
+                      value={reservationForm.arrivalDate}
+                      onChange={(e) =>
+                        handleReservationFormChange(
+                          "arrivalDate",
+                          e.target.value
+                        )
+                      }
+                    />
+                    <Label>End Date*</Label>
+                    <Input
+                      type="date"
+                      value={reservationForm.departureDate}
+                      disabled
+                    />
+                  </>
+                ) : (
+                  <div className="flex gap-2">
+                    <div>
+                      <Label>Arrival Date*</Label>
+                      <Input
+                        type="date"
+                        value={reservationForm.arrivalDate}
+                        onChange={(e) =>
+                          handleReservationFormChange(
+                            "arrivalDate",
+                            e.target.value
+                          )
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label>Departure Date*</Label>
+                      <Input
+                        type="date"
+                        value={reservationForm.departureDate}
+                        onChange={(e) =>
+                          handleReservationFormChange(
+                            "departureDate",
+                            e.target.value
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
               </>
             )}
-            {reservationForm.roomType === "Residential Suite" &&
-            reservationForm.rateType !== "nightly" ? (
-              <>
-                <Label>Start Date*</Label>
-                <Input
-                  type="date"
-                  value={reservationForm.arrivalDate}
-                  onChange={(e) =>
-                    handleReservationFormChange("arrivalDate", e.target.value)
-                  }
-                />
-                <Label>End Date*</Label>
-                <Input
-                  type="date"
-                  value={reservationForm.departureDate}
-                  disabled
-                />
-              </>
-            ) : (
+
+            {/* If not Residential Suite, show normal date pickers */}
+            {reservationForm.roomType !== "Residential Suite" && (
               <div className="flex gap-2">
                 <div>
                   <Label>Arrival Date*</Label>
@@ -1444,6 +1703,7 @@ export default function ClerkDashboard() {
                 </div>
               </div>
             )}
+
             <Label>Credit Card (optional, for guarantee)</Label>
             <Input
               value={reservationForm.creditCard}
@@ -1452,6 +1712,14 @@ export default function ClerkDashboard() {
               }
               placeholder="VISA 4111 1111 1111 1111"
             />
+
+            {/* Amount display */}
+            {showAmount && (
+              <div className="flex justify-between items-center p-2 rounded bg-blue-50 dark:bg-blue-900 my-2">
+                <span className="font-medium">Estimated Total:</span>
+                <span className="font-bold text-lg">${estimatedAmount}</span>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button onClick={handleCreateReservation}>

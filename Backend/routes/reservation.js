@@ -3,7 +3,7 @@ const router = express.Router();
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const authenticateToken = require("../middleware/authenticateToken");
+const { authenticateToken, authenticateClerkToken } = require("../middleware/authenticateToken");
 
 // POST: Create hotel room reservation
 router.post("/", authenticateToken, async (req, res) => {
@@ -213,6 +213,22 @@ router.delete("/:id", authenticateToken, async (req, res) => {
     } catch (err) {
         console.error("Reservation delete error:", err);
         res.status(500).json({ error: "Failed to delete reservation.", details: err.message });
+    }
+});
+
+// GET: All Reservations (for clerk)
+router.get("/all", authenticateClerkToken, async (req, res) => {
+    try {
+        const reservations = await prisma.reservation.findMany({
+            include: {
+                customer: true,
+                room: true
+            },
+            orderBy: { createdAt: "desc" }
+        });
+        res.json({ reservations });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch all reservations." });
     }
 });
 

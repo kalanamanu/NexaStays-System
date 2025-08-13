@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-const authenticateToken = require("../middleware/authenticateToken");// <-- Your JWT middleware
+const { authenticateToken } = require("../middleware/authenticateToken"); // <-- Import from your new combined file
 
 // Update customer profile
 router.put("/customer-profile/:id", authenticateToken, async (req, res) => {
@@ -27,7 +27,7 @@ router.put("/customer-profile/:id", authenticateToken, async (req, res) => {
             return res.status(404).json({ message: "Customer profile not found" });
         }
 
-        // You can also check that req.user.userId === profile.userId for extra security
+        // Extra security: check the user matches the profile
         if (profile.userId !== req.user.userId) {
             return res.status(403).json({ message: "Unauthorized" });
         }
@@ -40,7 +40,7 @@ router.put("/customer-profile/:id", authenticateToken, async (req, res) => {
                 phone,
                 country,
                 nic,
-                birthDay: new Date(birthDay),
+                birthDay: birthDay ? new Date(birthDay) : undefined,
                 address,
             },
         });
