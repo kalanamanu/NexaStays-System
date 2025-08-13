@@ -49,23 +49,6 @@ model TravelCompanyProfile {
   blockBookings  BlockBooking[]  
 }
 
-model Reservation {
-  id            Int       @id @default(autoincrement())
-  customer      CustomerProfile @relation(fields: [customerId], references: [id])
-  customerId    Int
-  roomType      String
-  arrivalDate   DateTime
-  departureDate DateTime?
-  guests        Int
-  totalAmount   Float
-  status        String   // e.g. "pending", "paid", "cancelled"
-  paymentIntentId String? // Stripe Payment Intent ID
-  durationType  String?   // "week" | "month" | null for hotel rooms
-  durationCount Int?      // 1, 2, 3, ... for residential suite stays
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
 model BlockBooking {
   id              Int        @id @default(autoincrement())
   travelCompany   TravelCompanyProfile @relation(fields: [travelCompanyId], references: [id])
@@ -78,4 +61,49 @@ model BlockBooking {
   totalAmount     Float
   status          String
   createdAt       DateTime  @default(now())
+}
+
+model Room {
+  id              Int      @id @default(autoincrement())
+  number          String   @unique
+  type            String
+  status          String   // "available" | "occupied" | "maintenance"
+  pricePerNight Float @default(120.0)
+  reservations    Reservation[] @relation("RoomReservations")
+}
+
+model Reservation {
+  id            Int       @id @default(autoincrement())
+  customer      CustomerProfile @relation(fields: [customerId], references: [id])
+  customerId    Int
+  roomType      String
+  room          Room?     @relation("RoomReservations", fields: [roomId], references: [id])
+  roomId        Int?
+  arrivalDate   DateTime
+  departureDate DateTime?
+  guests        Int
+  totalAmount   Float
+  status        String   // e.g. "pending", "paid", "cancelled"
+  paymentIntentId String? // Stripe Payment Intent ID
+  durationType  String?   // "week" | "month" | null for hotel rooms
+  durationCount Int?      // 1, 2, 3, ... for residential suite stays
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  billingRecord BillingRecord?
+}
+
+model BillingRecord {
+  id            Int      @id @default(autoincrement())
+  reservation   Reservation @relation(fields: [reservationId], references: [id])
+  reservationId Int      @unique
+  roomCharges   Float
+  restaurant    Float
+  roomService   Float
+  laundry       Float
+  telephone     Float
+  club          Float
+  other         Float
+  lateCheckout  Float
+  total         Float
+  createdAt     DateTime @default(now())
 }
