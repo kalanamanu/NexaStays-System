@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,43 +8,43 @@ datasource db {
 }
 
 model User {
-  id             Int                     @id @default(autoincrement())
-  email          String                  @unique
-  password       String
-  role           String                  // "customer" or "travel-company"
-  customerProfile CustomerProfile?       // one-to-one optional
+  id                   Int                   @id @default(autoincrement())
+  email                String                @unique
+  password             String
+  role                 String // "customer" or "travel-company"
+  customerProfile      CustomerProfile? // one-to-one optional
   travelCompanyProfile TravelCompanyProfile? // one-to-one optional
-  createdAt      DateTime                @default(now())
+  createdAt            DateTime              @default(now())
 }
 
 model CustomerProfile {
-  id        Int      @id @default(autoincrement())
-  firstName String
-  lastName  String
-  phone     String
-  country   String
-  nic       String
-  birthDay  DateTime
-  address   String
-  user      User     @relation(fields: [userId], references: [id])
-  userId    Int      @unique
-  reservations  Reservation[]
+  id           Int           @id @default(autoincrement())
+  firstName    String
+  lastName     String
+  phone        String
+  country      String
+  nic          String
+  birthDay     DateTime
+  address      String
+  user         User          @relation(fields: [userId], references: [id])
+  userId       Int           @unique
+  reservations Reservation[]
 }
 
 model TravelCompanyProfile {
-  id             Int      @id @default(autoincrement())
-  companyName    String
-  companyRegNo   String
-  phone          String
-  country        String
-  address        String
-  user           User     @relation(fields: [userId], references: [id])
-  userId         Int      @unique
-  blockBookings  BlockBooking[]  
+  id            Int            @id @default(autoincrement())
+  companyName   String
+  companyRegNo  String
+  phone         String
+  country       String
+  address       String
+  user          User           @relation(fields: [userId], references: [id])
+  userId        Int            @unique
+  blockBookings BlockBooking[]
 }
 
 model BlockBooking {
-  id              Int        @id @default(autoincrement())
+  id              Int                  @id @default(autoincrement())
   travelCompany   TravelCompanyProfile @relation(fields: [travelCompanyId], references: [id])
   travelCompanyId Int
   rooms           Int
@@ -60,42 +54,50 @@ model BlockBooking {
   discountRate    Float
   totalAmount     Float
   status          String
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime             @default(now())
 }
 
 model Room {
-  id              Int      @id @default(autoincrement())
-  number          String   @unique
-  type            String
-  status          String   // "available" | "occupied" | "maintenance"
-  pricePerNight Float @default(120.0)
-  reservations    Reservation[] @relation("RoomReservations")
+  id            Int           @id @default(autoincrement())
+  number        String        @unique
+  type          String
+  status        String // "available" | "occupied" | "maintenance"
+  pricePerNight Float         @default(120.0)
+  reservations  Reservation[] @relation("RoomReservations")
 }
 
 model Reservation {
-  id            Int       @id @default(autoincrement())
-  customer      CustomerProfile @relation(fields: [customerId], references: [id])
-  customerId    Int
-  roomType      String
-  room          Room?     @relation("RoomReservations", fields: [roomId], references: [id])
-  roomId        Int?
-  arrivalDate   DateTime
-  departureDate DateTime?
-  guests        Int
-  totalAmount   Float
-  status        String   // e.g. "pending", "paid", "cancelled"
-  paymentIntentId String? // Stripe Payment Intent ID
-  durationType  String?   // "week" | "month" | null for hotel rooms
-  durationCount Int?      // 1, 2, 3, ... for residential suite stays
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  billingRecord BillingRecord?
+  id         Int              @id @default(autoincrement())
+  // Optional, used for customer dashboard only
+  customer   CustomerProfile? @relation(fields: [customerId], references: [id])
+  customerId Int?
+
+  // Guest details for clerk/phone reservations
+  guestName  String?
+  guestPhone String?
+  guestEmail String?
+
+  // Room relation and info
+  roomId     Int? // Foreign key to Room, used for all reservations
+  room       Room?   @relation("RoomReservations", fields: [roomId], references: [id])
+  roomType   String
+  roomNumber String? // For display/search only, not a relation
+
+  arrivalDate     DateTime
+  departureDate   DateTime?
+  guests          Int
+  totalAmount     Float
+  status          String // "checked-in", "reserved", etc.
+  paymentIntentId String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  billingRecord   BillingRecord?
 }
 
 model BillingRecord {
-  id            Int      @id @default(autoincrement())
+  id            Int         @id @default(autoincrement())
   reservation   Reservation @relation(fields: [reservationId], references: [id])
-  reservationId Int      @unique
+  reservationId Int         @unique
   roomCharges   Float
   restaurant    Float
   roomService   Float
@@ -105,5 +107,5 @@ model BillingRecord {
   other         Float
   lateCheckout  Float
   total         Float
-  createdAt     DateTime @default(now())
+  createdAt     DateTime    @default(now())
 }

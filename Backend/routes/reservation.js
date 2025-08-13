@@ -217,19 +217,104 @@ router.delete("/:id", authenticateToken, async (req, res) => {
 });
 
 // GET: All Reservations (for clerk)
+
 router.get("/all", authenticateClerkToken, async (req, res) => {
     try {
         const reservations = await prisma.reservation.findMany({
             include: {
-                customer: true,
-                room: true
+                customer: true, // This gives you firstName, lastName, phone, etc.
+                room: true      // Optional, for room info
             },
             orderBy: { createdAt: "desc" }
         });
+
         res.json({ reservations });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: "Failed to fetch all reservations." });
     }
 });
 
+
+// Clerk creates a reservation for a guest (walk-in)
+// POST: Clerk creates (walk-in or phone) reservation for a guest
+router.post("/clerk", authenticateClerkToken, async (req, res) => {
+    const {
+        guestName,
+        guestPhone,
+        guestEmail,
+        roomType,
+        roomNumber,
+        arrivalDate,
+        departureDate,
+        guests,
+        totalAmount,
+        status
+    } = req.body;
+
+    if (
+        !guestName ||
+        !guestPhone ||
+        !roomType ||
+        !arrivalDate ||
+        !departureDate ||
+        !guests ||
+        totalAmount == null ||
+        !status ||
+        (status === "checked-in" && !roomNumber)
+    ) {
+        return res.status(400).json({ error: "All required fields must be filled." });
+    }
+
+    try {
+        const reservation = await prisma.reservation.create({
+            data: {
+                guestName,
+                guestPhone,
+                guestEmail,
+                roomType,
+                roomNumber: roomNumber || null,
+                arrivalDate: new Date(arrivalDate),
+                departureDate: new Date(departureDate),
+                guests,
+                totalAmount,
+                status
+            },
+        });
+
+        // Update room status if walk-in/checked-in
+        if (status === "checked-in" && roomNumber) {
+            await prisma.room.update({
+                where: { number: roomNumber },
+                data: { status: "occupied" }
+            });
+        }
+
+        res.json({ reservation });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+// PATCH /api/reservations/checkin
+router.patch("/checkin", authenticateClerkToken, async (req, res) => {
+    const { reservationId, roomNumber } = req.body;
+    if (!reservationId || !roomNumber) {
+        return res.status(400).json({ error: "Missing fields." });
+    }
+    try {
+        const reservation = await prisma.reservation.update({
+            where: { id: reservationId },
+            data: { status: "checked-in", roomNumber }
+        });
+        await prisma.room.update({
+            where: { number: roomNumber },
+            data: { status: "occupied" }
+        });
+        res.json({ reservation });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 module.exports = router;
