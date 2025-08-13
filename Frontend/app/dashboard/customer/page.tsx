@@ -33,15 +33,44 @@ import NavBar from "@/components/nav-bar";
 import { useUser } from "@/context/user-context";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 
 interface Reservation {
   id: string;
   roomType: string;
   arrivalDate: string;
   departureDate: string;
-  status: "pending" | "confirmed" | "cancelled";
+  status: "pending" | "confirmed" | "cancelled" | "pending_payment" | string;
   guests: number;
   totalAmount: number;
+}
+
+const ROOM_TYPES = [
+  { value: "standard", label: "Standard" },
+  { value: "deluxe", label: "Deluxe" },
+  { value: "suite", label: "Suite" },
+  { value: "residential", label: "Residential" },
+];
+
+const ROOM_TYPE_PRICES: Record<string, number> = {
+  standard: 120,
+  deluxe: 180,
+  suite: 280,
+  residential: 450,
+};
+
+function getNights(start: string, end: string) {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return 0;
+  const diffTime = endDate.getTime() - startDate.getTime();
+  return Math.max(Math.ceil(diffTime / (1000 * 60 * 60 * 24)), 0);
 }
 
 export default function CustomerDashboard() {
@@ -49,7 +78,6 @@ export default function CustomerDashboard() {
   const router = useRouter();
   const { toast } = useToast();
 
-  // All hooks before any conditional return!
   const [searchTerm, setSearchTerm] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [editProfile, setEditProfile] = useState({
@@ -62,35 +90,63 @@ export default function CustomerDashboard() {
     address: "",
   });
 
-  const [reservations, setReservations] = useState<Reservation[]>([
-    {
-      id: "RES001",
-      roomType: "Deluxe",
-      arrivalDate: "2024-02-15",
-      departureDate: "2024-02-18",
-      status: "confirmed",
-      guests: 2,
-      totalAmount: 540,
-    },
-    {
-      id: "RES002",
-      roomType: "Suite",
-      arrivalDate: "2024-03-10",
-      departureDate: "2024-03-12",
-      status: "pending",
-      guests: 2,
-      totalAmount: 560,
-    },
-    {
-      id: "RES003",
-      roomType: "Standard",
-      arrivalDate: "2024-01-20",
-      departureDate: "2024-01-22",
-      status: "cancelled",
-      guests: 1,
-      totalAmount: 240,
-    },
-  ]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [reservationsLoading, setReservationsLoading] = useState(false);
+
+  // Edit Reservation Dialog States
+  const [reservationEditOpen, setReservationEditOpen] = useState(false);
+  const [reservationToEdit, setReservationToEdit] =
+    useState<Reservation | null>(null);
+  const [reservationEditForm, setReservationEditForm] = useState<
+    Omit<Reservation, "id" | "status">
+  >({
+    roomType: "",
+    arrivalDate: "",
+    departureDate: "",
+    guests: 1,
+    totalAmount: 0,
+  });
+  const [reservationEditLoading, setReservationEditLoading] = useState(false);
+  const [reservationDeleteOpen, setReservationDeleteOpen] = useState(false);
+  const [reservationToDelete, setReservationToDelete] =
+    useState<Reservation | null>(null);
+  const [reservationDeleteLoading, setReservationDeleteLoading] =
+    useState(false);
+
+  // Fetch reservations for the logged-in customer
+  useEffect(() => {
+    const fetchReservations = async () => {
+      if (!user) return;
+      setReservationsLoading(true);
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("http://localhost:5000/api/reservations", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setReservations(data.reservations || []);
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Error loading reservations",
+            description: data.error || "Could not fetch reservations.",
+          });
+        }
+      } catch (err: any) {
+        toast({
+          variant: "destructive",
+          title: "Network error",
+          description: err.message || "Could not fetch reservations.",
+        });
+      } finally {
+        setReservationsLoading(false);
+      }
+    };
+    fetchReservations();
+  }, [user, toast]);
 
   // Redirect if not authenticated after loading
   useEffect(() => {
@@ -116,6 +172,19 @@ export default function CustomerDashboard() {
     }
   }, [user, editOpen]);
 
+  // Load reservation into edit dialog when opened
+  useEffect(() => {
+    if (reservationToEdit && reservationEditOpen) {
+      setReservationEditForm({
+        roomType: reservationToEdit.roomType || "",
+        arrivalDate: reservationToEdit.arrivalDate.split("T")[0],
+        departureDate: reservationToEdit.departureDate.split("T")[0],
+        guests: reservationToEdit.guests,
+        totalAmount: reservationToEdit.totalAmount,
+      });
+    }
+  }, [reservationToEdit, reservationEditOpen]);
+
   // Get customer name: try user.customerProfile.firstName, fallback to user.email
   const customerName = user?.customerProfile?.firstName
     ? `${user.customerProfile.firstName}${
@@ -125,11 +194,13 @@ export default function CustomerDashboard() {
 
   const filteredReservations = reservations.filter(
     (reservation) =>
-      reservation.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      reservation.roomType.toLowerCase().includes(searchTerm.toLowerCase())
+      String(reservation.id).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (reservation.roomType || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase())
   );
 
-  const handleCancelReservation = (reservationId: string) => {
+  const handleCancelReservation = async (reservationId: string) => {
     setReservations((prev) =>
       prev.map((res) =>
         res.id === reservationId
@@ -150,7 +221,7 @@ export default function CustomerDashboard() {
     }));
   };
 
-  // Updated: Use context's updateCustomerProfile (refreshes the user context)
+  // Profile dialog save
   const handleProfileSave = async () => {
     if (!user?.customerProfile?.id) return;
     const success = await updateCustomerProfile(editProfile);
@@ -169,11 +240,97 @@ export default function CustomerDashboard() {
     }
   };
 
+  // Reservation edit dialog field change - auto-update totalAmount
+  const handleReservationEditChange = (
+    e:
+      | React.ChangeEvent<HTMLInputElement>
+      | React.ChangeEvent<HTMLSelectElement>
+      | string
+  ) => {
+    let name: string, value: string;
+    if (typeof e === "string") {
+      name = "roomType";
+      value = e;
+    } else {
+      name = e.target.name;
+      value = e.target.value;
+    }
+    setReservationEditForm((prev) => {
+      const update = {
+        ...prev,
+        [name]:
+          name === "guests" || name === "totalAmount" ? Number(value) : value,
+      };
+      // Only auto-calculate for roomType, arrivalDate, departureDate
+      if (
+        ["roomType", "arrivalDate", "departureDate"].includes(name) &&
+        update.roomType &&
+        update.arrivalDate &&
+        update.departureDate
+      ) {
+        const nights = getNights(update.arrivalDate, update.departureDate);
+        const price = ROOM_TYPE_PRICES[update.roomType] || 0;
+        update.totalAmount = nights > 0 ? price * nights : 0;
+      }
+      return update;
+    });
+  };
+
+  // Reservation edit dialog save
+  const handleReservationEditSave = async () => {
+    if (!reservationToEdit) return;
+    setReservationEditLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        `http://localhost:5000/api/reservations/${reservationToEdit.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(reservationEditForm),
+        }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        setReservations((prev) =>
+          prev.map((r) =>
+            r.id === reservationToEdit.id ? { ...r, ...reservationEditForm } : r
+          )
+        );
+        toast({
+          title: "Reservation updated",
+          description: "Your reservation has been updated successfully.",
+        });
+        setReservationEditOpen(false);
+        setReservationToEdit(null);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Update failed",
+          description: data.error || "Could not update reservation.",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Network error",
+        description: err.message || "Could not update reservation.",
+      });
+    } finally {
+      setReservationEditLoading(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "confirmed":
         return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
       case "pending":
+      case "pending_payment":
+      case "Pending_payment":
         return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
       case "cancelled":
         return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
@@ -182,10 +339,52 @@ export default function CustomerDashboard() {
     }
   };
 
-  // --- All hooks above, now safe to conditionally return!
   if (loading)
     return <div className="text-center pt-32 text-2xl">Loading...</div>;
   if (!user) return null;
+
+  const handleDeleteReservation = async () => {
+    if (!reservationToDelete) return;
+    setReservationDeleteLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        `http://localhost:5000/api/reservations/${reservationToDelete.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        setReservations((prev) =>
+          prev.filter((r) => r.id !== reservationToDelete.id)
+        );
+        toast({
+          title: "Reservation deleted",
+          description: "Your reservation has been deleted successfully.",
+        });
+        setReservationDeleteOpen(false);
+        setReservationToDelete(null);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Delete failed",
+          description: data.error || "Could not delete reservation.",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Network error",
+        description: err.message || "Could not delete reservation.",
+      });
+    } finally {
+      setReservationDeleteLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
@@ -431,83 +630,260 @@ export default function CustomerDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredReservations.map((reservation) => (
-                      <TableRow key={reservation.id}>
-                        <TableCell className="font-medium">
-                          {reservation.id}
-                        </TableCell>
-                        <TableCell>{reservation.roomType}</TableCell>
-                        <TableCell>
-                          {new Date(
-                            reservation.arrivalDate
-                          ).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          {new Date(
-                            reservation.departureDate
-                          ).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>{reservation.guests}</TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(reservation.status)}>
-                            {reservation.status.charAt(0).toUpperCase() +
-                              reservation.status.slice(1)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>${reservation.totalAmount}</TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={reservation.status === "cancelled"}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={reservation.status === "cancelled"}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent>
-                                <DialogHeader>
-                                  <DialogTitle>Cancel Reservation</DialogTitle>
-                                  <DialogDescription>
-                                    Are you sure you want to cancel reservation{" "}
-                                    {reservation.id}? This action cannot be
-                                    undone.
-                                  </DialogDescription>
-                                </DialogHeader>
-                                <DialogFooter>
-                                  <Button variant="outline">
-                                    Keep Reservation
-                                  </Button>
-                                  <Button
-                                    variant="destructive"
-                                    onClick={() =>
-                                      handleCancelReservation(reservation.id)
-                                    }
-                                  >
-                                    Cancel Reservation
-                                  </Button>
-                                </DialogFooter>
-                              </DialogContent>
-                            </Dialog>
-                          </div>
+                    {reservationsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">
+                          Loading reservations...
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      filteredReservations.map((reservation) => (
+                        <TableRow key={reservation.id}>
+                          <TableCell className="font-medium">
+                            {reservation.id}
+                          </TableCell>
+                          <TableCell>{reservation.roomType}</TableCell>
+                          <TableCell>
+                            {new Date(
+                              reservation.arrivalDate
+                            ).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            {new Date(
+                              reservation.departureDate
+                            ).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>{reservation.guests}</TableCell>
+                          <TableCell>
+                            <Badge
+                              className={getStatusColor(reservation.status)}
+                            >
+                              {reservation.status.charAt(0).toUpperCase() +
+                                reservation.status.slice(1)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>${reservation.totalAmount}</TableCell>
+                          <TableCell>
+                            <div className="flex space-x-2">
+                              {/* Edit Reservation Dialog */}
+                              <Dialog
+                                open={
+                                  reservationEditOpen &&
+                                  reservationToEdit?.id === reservation.id
+                                }
+                                onOpenChange={(open) => {
+                                  setReservationEditOpen(open);
+                                  if (!open) setReservationToEdit(null);
+                                }}
+                              >
+                                <DialogTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={
+                                      reservation.status === "cancelled"
+                                    }
+                                    onClick={() => {
+                                      setReservationToEdit(reservation);
+                                      setReservationEditOpen(true);
+                                    }}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Edit Reservation</DialogTitle>
+                                    <DialogDescription>
+                                      Update your reservation details below.
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <form
+                                    onSubmit={(e) => {
+                                      e.preventDefault();
+                                      handleReservationEditSave();
+                                    }}
+                                  >
+                                    <div className="space-y-4">
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-1">
+                                          Room Type
+                                        </label>
+                                        <Select
+                                          value={reservationEditForm.roomType}
+                                          onValueChange={(value) =>
+                                            handleReservationEditChange(value)
+                                          }
+                                        >
+                                          <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Select room type" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {ROOM_TYPES.map((rt) => (
+                                              <SelectItem
+                                                key={rt.value}
+                                                value={rt.value}
+                                              >
+                                                {rt.label}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-1">
+                                          Check-in Date
+                                        </label>
+                                        <Input
+                                          type="date"
+                                          name="arrivalDate"
+                                          value={
+                                            reservationEditForm.arrivalDate
+                                          }
+                                          onChange={handleReservationEditChange}
+                                          required
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-1">
+                                          Check-out Date
+                                        </label>
+                                        <Input
+                                          type="date"
+                                          name="departureDate"
+                                          value={
+                                            reservationEditForm.departureDate
+                                          }
+                                          onChange={handleReservationEditChange}
+                                          required
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-1">
+                                          Guests
+                                        </label>
+                                        <Input
+                                          type="number"
+                                          name="guests"
+                                          min={1}
+                                          max={10}
+                                          value={reservationEditForm.guests}
+                                          onChange={handleReservationEditChange}
+                                          required
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-1">
+                                          Total Amount ($)
+                                        </label>
+                                        <Input
+                                          type="number"
+                                          name="totalAmount"
+                                          value={
+                                            reservationEditForm.totalAmount
+                                          }
+                                          readOnly
+                                          required
+                                        />
+                                      </div>
+                                    </div>
+                                    <DialogFooter className="mt-6">
+                                      <Button
+                                        variant="outline"
+                                        type="button"
+                                        onClick={() => {
+                                          setReservationEditOpen(false);
+                                          setReservationToEdit(null);
+                                        }}
+                                        disabled={reservationEditLoading}
+                                      >
+                                        Cancel
+                                      </Button>
+                                      <Button
+                                        type="submit"
+                                        disabled={reservationEditLoading}
+                                      >
+                                        Save Changes
+                                      </Button>
+                                    </DialogFooter>
+                                  </form>
+                                </DialogContent>
+                              </Dialog>
+                              {/* Cancel Reservation Dialog */}
+                              {/* Delete Reservation Dialog */}
+                              <Dialog
+                                open={
+                                  reservationDeleteOpen &&
+                                  reservationToDelete?.id === reservation.id
+                                }
+                                onOpenChange={(open) => {
+                                  setReservationDeleteOpen(open);
+                                  if (!open) setReservationToDelete(null);
+                                }}
+                              >
+                                <DialogTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={
+                                      reservation.status === "cancelled"
+                                    }
+                                    onClick={() => {
+                                      setReservationToDelete(reservation);
+                                      setReservationDeleteOpen(true);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>
+                                      Delete Reservation
+                                    </DialogTitle>
+                                    <DialogDescription>
+                                      Are you sure you want to{" "}
+                                      <span className="font-bold text-red-500">
+                                        permanently delete
+                                      </span>{" "}
+                                      reservation <b>{reservation.id}</b>? This
+                                      action cannot be undone.
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <DialogFooter>
+                                    <Button
+                                      variant="outline"
+                                      type="button"
+                                      onClick={() => {
+                                        setReservationDeleteOpen(false);
+                                        setReservationToDelete(null);
+                                      }}
+                                      disabled={reservationDeleteLoading}
+                                    >
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      type="button"
+                                      disabled={reservationDeleteLoading}
+                                      onClick={handleDeleteReservation}
+                                    >
+                                      {reservationDeleteLoading
+                                        ? "Deleting..."
+                                        : "Delete Reservation"}
+                                    </Button>
+                                  </DialogFooter>
+                                </DialogContent>
+                              </Dialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
-
-              {filteredReservations.length === 0 && (
+              {!reservationsLoading && filteredReservations.length === 0 && (
                 <div className="text-center py-8">
                   <Calendar className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">

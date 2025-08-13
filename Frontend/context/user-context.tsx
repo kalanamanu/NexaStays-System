@@ -122,7 +122,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     role: UserRole
   ): Promise<boolean> => {
     try {
-      const response = await fetch("http://localhost:5000/api/login", {
+      const response = await fetch("http://localhost:5000/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, role }),
@@ -146,7 +146,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     formData: Record<string, any>
   ): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await fetch("http://localhost:5000/api/register", {
+      const response = await fetch("http://localhost:5000/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
