@@ -140,14 +140,17 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ message: "Invalid credentials" });
         }
 
-        // Add customerProfileId to JWT if available
+        // FIX: Add travelCompanyProfileId and customerProfileId as appropriate
         const tokenPayload = {
-            userId: user.id,
+            id: user.id,
             email: user.email,
             role: user.role,
         };
         if (user.customerProfile) {
             tokenPayload.customerProfileId = user.customerProfile.id;
+        }
+        if (user.travelCompanyProfile) {
+            tokenPayload.travelCompanyProfileId = user.travelCompanyProfile.id;
         }
 
         const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1d' });
@@ -174,7 +177,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     console.log("[/api/me] req.user", req.user);
     try {
         const user = await prisma.user.findUnique({
-            where: { id: req.user.userId },
+            where: { id: req.user.id }, // FIXED: Use id, not userId
             include: {
                 customerProfile: true,
                 travelCompanyProfile: true,

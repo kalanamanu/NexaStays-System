@@ -6,6 +6,8 @@ const authRoutes = require('./routes/auth');
 const customerProfileRoutes = require("./routes/customer-profile");
 const reservationRoutes = require("./routes/reservation");
 require('./cron/reservationTasks');
+const blockBookingRoutes = require("./routes/block-bookings");
+
 
 const app = express();
 
@@ -15,6 +17,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/customer-profile', customerProfileRoutes);
 app.use("/api/reservations", reservationRoutes);
+app.use('/api/block-bookings', blockBookingRoutes);
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'ok' });

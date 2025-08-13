@@ -46,6 +46,7 @@ model TravelCompanyProfile {
   address        String
   user           User     @relation(fields: [userId], references: [id])
   userId         Int      @unique
+  blockBookings  BlockBooking[]  
 }
 
 model Reservation {
@@ -54,11 +55,27 @@ model Reservation {
   customerId    Int
   roomType      String
   arrivalDate   DateTime
-  departureDate DateTime
+  departureDate DateTime?
   guests        Int
   totalAmount   Float
   status        String   // e.g. "pending", "paid", "cancelled"
   paymentIntentId String? // Stripe Payment Intent ID
+  durationType  String?   // "week" | "month" | null for hotel rooms
+  durationCount Int?      // 1, 2, 3, ... for residential suite stays
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model BlockBooking {
+  id              Int        @id @default(autoincrement())
+  travelCompany   TravelCompanyProfile @relation(fields: [travelCompanyId], references: [id])
+  travelCompanyId Int
+  rooms           Int
+  roomType        String
+  arrivalDate     DateTime
+  departureDate   DateTime
+  discountRate    Float
+  totalAmount     Float
+  status          String
+  createdAt       DateTime  @default(now())
 }

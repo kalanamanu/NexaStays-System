@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const authenticateToken = require("../middleware/authenticateToken");
 
-// POST: Create reservation
+// POST: Create hotel room reservation
 router.post("/", authenticateToken, async (req, res) => {
     const {
         roomType,
@@ -13,7 +13,10 @@ router.post("/", authenticateToken, async (req, res) => {
         departureDate,
         guests,
         totalAmount,
-        skipCreditCard
+        skipCreditCard,
+        fullName,
+        email,
+        phone
     } = req.body;
     const customerId = req.user.customerProfileId;
 
@@ -57,6 +60,65 @@ router.post("/", authenticateToken, async (req, res) => {
     }
 });
 
+// POST: Create residential suite reservation (weekly/monthly)
+router.post("/residential", authenticateToken, async (req, res) => {
+    const {
+        roomType, // should be "residential"
+        durationType, // "week" or "month"
+        durationCount,
+        arrivalDate,
+        departureDate, // can be calculated on frontend and sent in request
+        guests,
+        totalAmount,
+        skipCreditCard,
+        fullName,
+        email,
+        phone
+    } = req.body;
+    const customerId = req.user.customerProfileId;
+
+    if (!customerId) {
+        return res.status(400).json({ error: "Customer profile not found. Please log in again." });
+    }
+
+    try {
+        let paymentIntent = null;
+        let status = "pending";
+        let paymentIntentId = null;
+        let clientSecret = null;
+
+        if (!skipCreditCard) {
+            paymentIntent = await stripe.paymentIntents.create({
+                amount: Math.round(totalAmount * 100),
+                currency: "usd",
+                metadata: { integration_check: "accept_a_payment" },
+            });
+            status = "pending_payment";
+            paymentIntentId = paymentIntent.id;
+            clientSecret = paymentIntent.client_secret;
+        }
+
+        const reservation = await prisma.reservation.create({
+            data: {
+                customerId,
+                roomType: "residential",
+                arrivalDate: new Date(arrivalDate),
+                departureDate: departureDate ? new Date(departureDate) : null,
+                guests,
+                totalAmount,
+                status,
+                paymentIntentId,
+                durationType,
+                durationCount,
+            },
+        });
+
+        res.json({ reservation, clientSecret });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET: All Reservations for Customer
 router.get("/", authenticateToken, async (req, res) => {
     const customerId = req.user.customerProfileId;
@@ -68,7 +130,7 @@ router.get("/", authenticateToken, async (req, res) => {
     try {
         const reservations = await prisma.reservation.findMany({
             where: { customerId },
-            orderBy: { createdAt: "desc" }, // latest first
+            orderBy: { createdAt: "desc" },
         });
         res.json({ reservations });
     } catch (err) {
@@ -76,16 +138,18 @@ router.get("/", authenticateToken, async (req, res) => {
     }
 });
 
-// ==================== PUT: Edit Reservation by ID ====================
+// PUT: Edit Reservation by ID
 router.put("/:id", authenticateToken, async (req, res) => {
-    const reservationId = req.params.id;
+    const reservationId = Number(req.params.id);
     const customerId = req.user.customerProfileId;
     const {
         roomType,
         arrivalDate,
         departureDate,
         guests,
-        totalAmount
+        totalAmount,
+        durationType,
+        durationCount,
     } = req.body;
 
     if (!customerId) {
@@ -94,7 +158,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
 
     try {
         // Ensure the reservation belongs to the logged-in customer
-        const reservationId = Number(req.params.id); // convert to number
         const reservation = await prisma.reservation.findUnique({
             where: { id: reservationId },
         });
@@ -108,22 +171,24 @@ router.put("/:id", authenticateToken, async (req, res) => {
             data: {
                 roomType,
                 arrivalDate: new Date(arrivalDate),
-                departureDate: new Date(departureDate),
+                departureDate: departureDate ? new Date(departureDate) : null,
                 guests,
                 totalAmount,
+                durationType,
+                durationCount,
             }
         });
 
         res.json({ reservation: updatedReservation });
     } catch (err) {
-        console.error("Reservation update error:", err); // <--- Add this
+        console.error("Reservation update error:", err);
         res.status(500).json({ error: "Failed to update reservation.", details: err.message });
     }
 });
 
-// ==================== DELETE: Delete Reservation by ID ====================
+// DELETE: Delete Reservation by ID
 router.delete("/:id", authenticateToken, async (req, res) => {
-    const reservationId = Number(req.params.id); // Ensure it's a number!
+    const reservationId = Number(req.params.id);
     const customerId = req.user.customerProfileId;
 
     if (!customerId) {
