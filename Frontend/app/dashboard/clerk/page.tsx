@@ -760,6 +760,37 @@ export default function ClerkDashboard() {
     return nights * nightlyPrice;
   }
 
+  async function fetchAllReservations() {
+    setLoadingReservations(true);
+    setReservationError(null);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("http://localhost:5000/api/reservations/all", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!res.ok) throw new Error("Failed to fetch reservations");
+      const data = await res.json();
+      // ...transform as before
+      const flatReservations: Reservation[] = data.reservations.map(
+        (r: any) => ({
+          ...r,
+          guestName: r.customer
+            ? `${r.customer.firstName} ${r.customer.lastName}`
+            : r.guestName || "-",
+          phoneNumber: r.customer?.phone || r.phoneNumber || "-",
+        })
+      );
+      setReservations(flatReservations);
+    } catch (err: any) {
+      setReservationError(err.message || "Failed to load reservations.");
+    } finally {
+      setLoadingReservations(false);
+    }
+  }
+
   // Check-In Logic
   async function handleAssignRoomAndCheckIn() {
     if (!selectedReservation || !selectedRoom) {
@@ -808,8 +839,67 @@ export default function ClerkDashboard() {
       });
     }
   }
+
+  useEffect(() => {
+    if (!selectedReservation) {
+      setCheckoutBill({
+        roomCharges: 0,
+        restaurant: 0,
+        roomService: 0,
+        laundry: 0,
+        telephone: 0,
+        club: 0,
+        other: 0,
+        lateCheckout: 0,
+        total: 0,
+      });
+      return;
+    }
+    const res = reservations.find((r) => r.id === selectedReservation);
+    if (res) {
+      setCheckoutBill((bill) => ({
+        ...bill,
+        roomCharges: res.totalAmount,
+        // Optionally reset the others if switching reservations:
+        restaurant: 0,
+        roomService: 0,
+        laundry: 0,
+        telephone: 0,
+        club: 0,
+        other: 0,
+        lateCheckout: 0,
+        total: res.totalAmount, // optionally set total to roomCharges initially
+      }));
+    }
+  }, [selectedReservation, reservations]);
+
+  // When any bill field changes, recalculate total
+  useEffect(() => {
+    setCheckoutBill((bill) => ({
+      ...bill,
+      total:
+        bill.roomCharges +
+        bill.restaurant +
+        bill.roomService +
+        bill.laundry +
+        bill.telephone +
+        bill.club +
+        bill.other +
+        bill.lateCheckout,
+    }));
+  }, [
+    checkoutBill.roomCharges,
+    checkoutBill.restaurant,
+    checkoutBill.roomService,
+    checkoutBill.laundry,
+    checkoutBill.telephone,
+    checkoutBill.club,
+    checkoutBill.other,
+    checkoutBill.lateCheckout,
+  ]);
+
   // Check-Out Logic
-  function handleCheckOut() {
+  async function handleCheckOut() {
     if (!selectedReservation || !paymentMethod) {
       toast({
         title: "Error",
@@ -838,11 +928,13 @@ export default function ClerkDashboard() {
         res.rateType
       );
     }
+
+    // Prepare bill (with lateFee)
     const bill: Bill = {
       ...checkoutBill,
       lateCheckout: lateFee,
       total:
-        res.totalAmount +
+        checkoutBill.roomCharges +
         checkoutBill.restaurant +
         checkoutBill.roomService +
         checkoutBill.laundry +
@@ -850,31 +942,49 @@ export default function ClerkDashboard() {
         checkoutBill.club +
         checkoutBill.other +
         lateFee,
-      roomCharges: res.totalAmount,
+      roomCharges: checkoutBill.roomCharges,
     };
     setCheckoutBill(bill);
 
-    // Mark reservation as checked-out
-    setReservations((prev) =>
-      prev.map((r) =>
-        r.id === selectedReservation
-          ? { ...r, status: "checked-out", updatedAt: new Date().toISOString() }
-          : r
-      )
-    );
-    // Make room available
-    setAvailableRooms((prev) =>
-      prev.map((r) =>
-        r.number === res.roomNumber ? { ...r, status: "available" } : r
-      )
-    );
-    setShowBillDialog(true);
-    setSelectedReservation("");
-    setPaymentMethod("");
-    toast({
-      title: "Check-out Successful",
-      description: "Guest has been checked out and receipt generated.",
-    });
+    try {
+      const token = localStorage.getItem("token");
+      // 1. Mark reservation as checked-out, make room available, and save billing record
+      const resCheckout = await fetch(
+        "http://localhost:5000/api/reservations/checkout",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            reservationId: selectedReservation,
+            paymentMethod,
+            bill,
+          }),
+        }
+      );
+      if (!resCheckout.ok) {
+        const errData = await resCheckout.json();
+        throw new Error(errData.error || "Checkout failed.");
+      }
+      // 2. Refresh state
+      await fetchAllReservations();
+      await fetchAvailableRooms();
+      setShowBillDialog(true);
+      setSelectedReservation("");
+      setPaymentMethod("");
+      toast({
+        title: "Check-out Successful",
+        description: "Guest has been checked out and receipt generated.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Could not check out reservation",
+        variant: "destructive",
+      });
+    }
   }
 
   // Filtering, coloring, helpers

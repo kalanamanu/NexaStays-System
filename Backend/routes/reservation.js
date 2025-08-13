@@ -317,4 +317,44 @@ router.patch("/checkin", authenticateClerkToken, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+//Check-out API
+router.post("/checkout", authenticateClerkToken, async (req, res) => {
+    const { reservationId, paymentMethod, bill } = req.body;
+    if (!reservationId || !bill) {
+        return res.status(400).json({ error: "Missing required fields." });
+    }
+    try {
+        // Update reservation status
+        const reservation = await prisma.reservation.update({
+            where: { id: reservationId },
+            data: { status: "checked-out", updatedAt: new Date().toISOString() }
+        });
+        // Make room available
+        if (reservation.roomNumber) {
+            await prisma.room.update({
+                where: { number: reservation.roomNumber },
+                data: { status: "available" }
+            });
+        }
+        // Create billing record
+        const billingRecord = await prisma.billingRecord.create({
+            data: {
+                reservationId: reservation.id,
+                roomCharges: bill.roomCharges,
+                restaurant: bill.restaurant,
+                roomService: bill.roomService,
+                laundry: bill.laundry,
+                telephone: bill.telephone,
+                club: bill.club,
+                other: bill.other,
+                lateCheckout: bill.lateCheckout,
+                total: bill.total,
+            },
+        });
+        res.json({ reservation, billingRecord });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 module.exports = router;
