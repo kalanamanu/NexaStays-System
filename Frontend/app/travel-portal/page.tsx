@@ -153,7 +153,7 @@ export default function TravelCompanyPortal() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Unified Create/Update handler
+  // Create/Update handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 

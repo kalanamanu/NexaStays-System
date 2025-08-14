@@ -812,7 +812,6 @@ export default function ClerkDashboard() {
       });
       if (!res.ok) throw new Error("Failed to fetch reservations");
       const data = await res.json();
-      // ...transform as before
       const flatReservations: Reservation[] = data.reservations.map(
         (r: any) => ({
           ...r,
@@ -820,8 +819,8 @@ export default function ClerkDashboard() {
             ? `${r.customer.firstName} ${r.customer.lastName}`
             : r.guestName || "-",
           phoneNumber: r.customer?.phone || r.phoneNumber || "-",
-          arrivalDate: r.arrivalDate?.slice(0, 10), // <--- format to YYYY-MM-DD
-          departureDate: r.departureDate?.slice(0, 10), // <--- format to YYYY-MM-DD
+          arrivalDate: r.arrivalDate?.slice(0, 10),
+          departureDate: r.departureDate?.slice(0, 10),
         })
       );
       setReservations(flatReservations);

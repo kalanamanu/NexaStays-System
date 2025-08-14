@@ -9,7 +9,7 @@ import { Toaster } from "@/components/ui/toaster";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "HotelChain - Reservation System",
+  title: "Nexa Stays - Hotel Reservation system ",
   description: "Modern hotel reservation and management system",
 };
 
@@ -20,6 +20,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="icon" href="/favicon.ico" />
+        <title>Nexa Stays - Hotel Reservation system</title>
+        <meta
+          name="description"
+          content="Modern hotel reservation and management system"
+        />
+      </head>
       <body className={inter.className}>
         <ThemeProvider
           attribute="class"

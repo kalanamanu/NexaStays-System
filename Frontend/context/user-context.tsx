@@ -154,8 +154,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const data = await response.json();
 
       if (response.ok && data.user) {
-        // Optionally auto-login after register:
-        // await login(formData.email, formData.password, formData.role);
         return { success: true, message: "Registered successfully" };
       } else {
         return {
