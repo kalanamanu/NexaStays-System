@@ -406,9 +406,7 @@ export default function ClerkDashboard() {
     string | null
   >(null);
 
-  // Auto-cancel and no-show simulation: Mark reservations for today without credit card as auto-cancelled after 7 PM.
   useEffect(() => {
-    // Simulate: At 7 PM, auto-cancel pending/confirmed reservations for today without credit card
     const now = new Date();
     const isNight = now.getHours() >= 19;
     if (isNight) {
@@ -430,7 +428,6 @@ export default function ClerkDashboard() {
         })
       );
     }
-    // Simulate: At 7 PM, mark today's no-shows and create bills
     if (isNight) {
       setReservations((prev) =>
         prev.map((r) => {

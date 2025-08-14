@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-const { authenticateToken } = require("../middleware/authenticateToken"); // <-- Import from your new combined file
+const { authenticateToken } = require("../middleware/authenticateToken");
 
 // Update customer profile
 router.put("/customer-profile/:id", authenticateToken, async (req, res) => {
