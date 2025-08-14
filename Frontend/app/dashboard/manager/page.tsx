@@ -48,6 +48,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 export default function ManagerDashboard() {
   const { user } = useUser();
@@ -94,7 +96,7 @@ export default function ManagerDashboard() {
         setTotalGuests(0);
       })
       .finally(() => setLoading(false));
-  }, [dateRange]);
+  }, [dateRange, user]);
 
   // Calculate metrics from fetched data
   const totalRevenue = revenueData.reduce(
@@ -108,8 +110,6 @@ export default function ManagerDashboard() {
           occupancyData.length
       )
     : 0;
-
-  if (!user) return null;
 
   // Calculate Total Room Revenue and Sold Room Nights
   const totalRoomRevenue = revenueData.reduce(
@@ -135,6 +135,67 @@ export default function ManagerDashboard() {
   const revenuePerRoom = totalAvailableRoomNights
     ? totalRoomRevenue / totalAvailableRoomNights
     : 0;
+
+  // PDF Export Handlers
+  function exportOccupancyPDF() {
+    const doc = new jsPDF();
+    doc.text("Occupancy Report", 14, 16);
+    if (!occupancyData.length) {
+      doc.text("No data", 14, 30);
+    } else {
+      const byTypeKeys = Object.keys(occupancyData[0]?.byType || {});
+      const head = [
+        [
+          "Date",
+          "Occupancy (%)",
+          ...byTypeKeys.map((type) => `${type} (Occupied)`),
+        ],
+      ];
+      const body = occupancyData.map((day) => [
+        day.date,
+        day.occupancy,
+        ...byTypeKeys.map((type) => day.byType[type] ?? 0),
+      ]);
+      autoTable(doc, {
+        head,
+        body,
+        startY: 22,
+      });
+    }
+    doc.save(
+      `occupancy-report_${
+        dateRange.from?.toISOString().slice(0, 10) ?? ""
+      }_to_${dateRange.to?.toISOString().slice(0, 10) ?? ""}.pdf`
+    );
+  }
+
+  function exportRevenuePDF() {
+    const doc = new jsPDF();
+    doc.text("Revenue Report", 14, 16);
+    if (!revenueData.length) {
+      doc.text("No data", 14, 30);
+    } else {
+      const head = [["Month", "Room Revenue", "Restaurant", "Other Services"]];
+      const body = revenueData.map((r) => [
+        r.month,
+        r.room,
+        r.restaurant,
+        r.other,
+      ]);
+      autoTable(doc, {
+        head,
+        body,
+        startY: 22,
+      });
+    }
+    doc.save(
+      `revenue-report_${dateRange.from?.toISOString().slice(0, 10) ?? ""}_to_${
+        dateRange.to?.toISOString().slice(0, 10) ?? ""
+      }.pdf`
+    );
+  }
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
@@ -274,9 +335,9 @@ export default function ManagerDashboard() {
                             />
                           </PopoverContent>
                         </Popover>
-                        <Button variant="outline">
+                        <Button variant="outline" onClick={exportOccupancyPDF}>
                           <Download className="h-4 w-4 mr-2" />
-                          Export
+                          Export PDF
                         </Button>
                       </div>
                     </div>
@@ -316,7 +377,6 @@ export default function ManagerDashboard() {
                       <CardDescription>Real-time room status</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      {/* Optionally, map room type breakdown here from occupancyData[occupancyData.length-1]?.byType */}
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -360,7 +420,6 @@ export default function ManagerDashboard() {
                     </CardContent>
                   </Card>
 
-                  {/* Static forecast for now */}
                   <Card>
                     <CardHeader>
                       <CardTitle>Projected Occupancy</CardTitle>
@@ -455,7 +514,7 @@ export default function ManagerDashboard() {
                             />
                           </PopoverContent>
                         </Popover>
-                        <Button variant="outline">
+                        <Button variant="outline" onClick={exportRevenuePDF}>
                           <Download className="h-4 w-4 mr-2" />
                           Export PDF
                         </Button>
