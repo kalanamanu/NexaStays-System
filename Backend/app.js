@@ -8,6 +8,7 @@ const reservationRoutes = require("./routes/reservation");
 require('./cron/reservationTasks');
 const blockBookingRoutes = require("./routes/block-bookings");
 const roomRoutes = require("./routes/room");
+const analyticsRoutes = require("./routes/analytics");
 
 
 const app = express();
@@ -20,6 +21,7 @@ app.use('/api/customer-profile', customerProfileRoutes);
 app.use("/api/reservations", reservationRoutes);
 app.use('/api/block-bookings', blockBookingRoutes);
 app.use("/api/rooms", roomRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'ok' });

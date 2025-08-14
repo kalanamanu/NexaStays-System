@@ -1,60 +1,140 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Button } from "@/components/ui/button"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { CalendarIcon, Download, TrendingUp, Users, DollarSign, Bed } from "lucide-react"
-import { format } from "date-fns"
-import { cn } from "@/lib/utils"
-import NavBar from "@/components/nav-bar"
-import { useUser } from "@/context/user-context"
-import { useRouter } from "next/navigation"
-import { Bar, BarChart, Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
-
-const occupancyData = [
-  { date: "2024-01-01", occupancy: 85, rooms: 120 },
-  { date: "2024-01-02", occupancy: 92, rooms: 120 },
-  { date: "2024-01-03", occupancy: 78, rooms: 120 },
-  { date: "2024-01-04", occupancy: 88, rooms: 120 },
-  { date: "2024-01-05", occupancy: 95, rooms: 120 },
-  { date: "2024-01-06", occupancy: 82, rooms: 120 },
-  { date: "2024-01-07", occupancy: 90, rooms: 120 },
-]
-
-const revenueData = [
-  { month: "Jan", room: 45000, restaurant: 12000, other: 3000 },
-  { month: "Feb", room: 52000, restaurant: 14000, other: 3500 },
-  { month: "Mar", room: 48000, restaurant: 13000, other: 3200 },
-  { month: "Apr", room: 61000, restaurant: 16000, other: 4000 },
-  { month: "May", room: 55000, restaurant: 15000, other: 3800 },
-  { month: "Jun", room: 67000, restaurant: 18000, other: 4500 },
-]
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  CalendarIcon,
+  Download,
+  TrendingUp,
+  Users,
+  DollarSign,
+  Bed,
+} from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import NavBar from "@/components/nav-bar";
+import { useUser } from "@/context/user-context";
+import { useRouter } from "next/navigation";
+import {
+  Bar,
+  BarChart,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 export default function ManagerDashboard() {
-  const { user } = useUser()
-  const router = useRouter()
+  const { user } = useUser();
+  const router = useRouter();
   const [dateRange, setDateRange] = useState<{
-    from: Date | undefined
-    to: Date | undefined
+    from: Date | undefined;
+    to?: Date | undefined;
   }>({
-    from: new Date(2024, 0, 1),
-    to: new Date(2024, 0, 31),
-  })
+    from: new Date(new Date().getFullYear(), 0, 1), // Jan 1st this year
+    to: new Date(), // today
+  });
+
+  // State for analytics
+  const [occupancyData, setOccupancyData] = useState<any[]>([]);
+  const [revenueData, setRevenueData] = useState<any[]>([]);
+  const [totalGuests, setTotalGuests] = useState<number>(0);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!user || user.role !== "manager") {
-      router.push("/login")
-    }
-  }, [user, router])
+    if (!dateRange.from || !dateRange.to) return;
+    setLoading(true);
+    const from = dateRange.from.toISOString().slice(0, 10);
+    const to = dateRange.to.toISOString().slice(0, 10);
 
-  const totalRevenue = revenueData.reduce((sum, month) => sum + month.room + month.restaurant + month.other, 0)
-  const averageOccupancy = Math.round(occupancyData.reduce((sum, day) => sum + day.occupancy, 0) / occupancyData.length)
+    Promise.all([
+      fetch(
+        `http://localhost:5000/api/analytics/occupancy?from=${from}&to=${to}`
+      ).then((r) => r.json()),
+      fetch(
+        `http://localhost:5000/api/analytics/revenue?from=${from}&to=${to}`
+      ).then((r) => r.json()),
+      fetch(
+        `http://localhost:5000/api/analytics/guests?from=${from}&to=${to}`
+      ).then((r) => r.json()),
+    ])
+      .then(([occupancy, revenue, guests]) => {
+        setOccupancyData(occupancy);
+        setRevenueData(revenue);
+        setTotalGuests(guests.totalGuests);
+      })
+      .catch(() => {
+        setOccupancyData([]);
+        setRevenueData([]);
+        setTotalGuests(0);
+      })
+      .finally(() => setLoading(false));
+  }, [dateRange]);
 
-  if (!user) return null
+  // Calculate metrics from fetched data
+  const totalRevenue = revenueData.reduce(
+    (sum, month) =>
+      sum + (month.room || 0) + (month.restaurant || 0) + (month.other || 0),
+    0
+  );
+  const averageOccupancy = occupancyData.length
+    ? Math.round(
+        occupancyData.reduce((sum, day) => sum + (day.occupancy || 0), 0) /
+          occupancyData.length
+      )
+    : 0;
+
+  if (!user) return null;
+
+  // Calculate Total Room Revenue and Sold Room Nights
+  const totalRoomRevenue = revenueData.reduce(
+    (sum, month) => sum + (month.room || 0),
+    0
+  );
+  const soldRoomNights = occupancyData.reduce(
+    (sum, day) =>
+      sum +
+      (Object.values(day.byType || {}).reduce(
+        (a: number, b: unknown) => a + (typeof b === "number" ? b : 0),
+        0
+      ) || 0),
+    0
+  );
+  const totalDays = occupancyData.length;
+  const totalRooms = occupancyData.length > 0 ? occupancyData[0].rooms : 0;
+  const totalAvailableRoomNights = totalRooms * totalDays;
+
+  const averageDailyRate = soldRoomNights
+    ? totalRoomRevenue / soldRoomNights
+    : 0;
+  const revenuePerRoom = totalAvailableRoomNights
+    ? totalRoomRevenue / totalAvailableRoomNights
+    : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
@@ -63,53 +143,76 @@ export default function ManagerDashboard() {
       <div className="py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Manager Dashboard</h1>
-            <p className="text-gray-600 dark:text-gray-300 mt-2">Monitor hotel performance and analytics</p>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Manager Dashboard
+            </h1>
+            <p className="text-gray-600 dark:text-gray-300 mt-2">
+              Monitor hotel performance and analytics
+            </p>
           </div>
 
           {/* Key Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Total Revenue
+                </CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">${totalRevenue.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">+12% from last period</p>
+                <div className="text-2xl font-bold">
+                  {loading ? "Loading..." : `$${totalRevenue.toLocaleString()}`}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  +12% from last period
+                </p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Avg Occupancy</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Avg Occupancy
+                </CardTitle>
                 <Bed className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{averageOccupancy}%</div>
-                <p className="text-xs text-muted-foreground">+5% from last period</p>
+                <div className="text-2xl font-bold">
+                  {loading ? "Loading..." : `${averageOccupancy}%`}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  +5% from last period
+                </p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Guests</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Total Guests
+                </CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">1,234</div>
-                <p className="text-xs text-muted-foreground">+8% from last period</p>
+                <div className="text-2xl font-bold">
+                  {loading ? "Loading..." : totalGuests}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  +8% from last period
+                </p>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Growth Rate</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Growth Rate
+                </CardTitle>
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">+15.2%</div>
-                <p className="text-xs text-muted-foreground">Monthly growth rate</p>
+                <p className="text-xs text-muted-foreground">
+                  Monthly growth rate
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -128,7 +231,9 @@ export default function ManagerDashboard() {
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                       <div>
                         <CardTitle>Occupancy Analysis</CardTitle>
-                        <CardDescription>Track room occupancy over time</CardDescription>
+                        <CardDescription>
+                          Track room occupancy over time
+                        </CardDescription>
                       </div>
                       <div className="flex items-center gap-2">
                         <Popover>
@@ -137,14 +242,15 @@ export default function ManagerDashboard() {
                               variant="outline"
                               className={cn(
                                 "justify-start text-left font-normal",
-                                !dateRange.from && "text-muted-foreground",
+                                !dateRange.from && "text-muted-foreground"
                               )}
                             >
                               <CalendarIcon className="mr-2 h-4 w-4" />
                               {dateRange.from ? (
                                 dateRange.to ? (
                                   <>
-                                    {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
+                                    {format(dateRange.from, "LLL dd, y")} -{" "}
+                                    {format(dateRange.to, "LLL dd, y")}
                                   </>
                                 ) : (
                                   format(dateRange.from, "LLL dd, y")
@@ -160,8 +266,11 @@ export default function ManagerDashboard() {
                               mode="range"
                               defaultMonth={dateRange.from}
                               selected={dateRange}
-                              onSelect={setDateRange}
+                              onSelect={(range) => {
+                                if (range) setDateRange(range);
+                              }}
                               numberOfMonths={2}
+                              required={false}
                             />
                           </PopoverContent>
                         </Popover>
@@ -177,11 +286,21 @@ export default function ManagerDashboard() {
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={occupancyData}>
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" tickFormatter={(value) => format(new Date(value), "MMM dd")} />
+                          <XAxis
+                            dataKey="date"
+                            tickFormatter={(value) =>
+                              format(new Date(value), "MMM dd")
+                            }
+                          />
                           <YAxis />
                           <Tooltip
-                            labelFormatter={(value) => format(new Date(value), "MMM dd, yyyy")}
-                            formatter={(value: number) => [`${value}%`, "Occupancy"]}
+                            labelFormatter={(value) =>
+                              format(new Date(value), "MMM dd, yyyy")
+                            }
+                            formatter={(value: number) => [
+                              `${value}%`,
+                              "Occupancy",
+                            ]}
                           />
                           <Bar dataKey="occupancy" fill="#3b82f6" />
                         </BarChart>
@@ -197,6 +316,7 @@ export default function ManagerDashboard() {
                       <CardDescription>Real-time room status</CardDescription>
                     </CardHeader>
                     <CardContent>
+                      {/* Optionally, map room type breakdown here from occupancyData[occupancyData.length-1]?.byType */}
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -207,35 +327,40 @@ export default function ManagerDashboard() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          <TableRow>
-                            <TableCell>Standard</TableCell>
-                            <TableCell>45</TableCell>
-                            <TableCell>15</TableCell>
-                            <TableCell>75%</TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>Deluxe</TableCell>
-                            <TableCell>28</TableCell>
-                            <TableCell>7</TableCell>
-                            <TableCell>80%</TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>Suite</TableCell>
-                            <TableCell>12</TableCell>
-                            <TableCell>3</TableCell>
-                            <TableCell>80%</TableCell>
-                          </TableRow>
-                          <TableRow>
-                            <TableCell>Residential</TableCell>
-                            <TableCell>8</TableCell>
-                            <TableCell>2</TableCell>
-                            <TableCell>80%</TableCell>
-                          </TableRow>
+                          {occupancyData.length > 0 &&
+                          occupancyData[occupancyData.length - 1].byType &&
+                          occupancyData[occupancyData.length - 1]
+                            .roomsByType ? (
+                            Object.entries(
+                              occupancyData[occupancyData.length - 1].byType
+                            ).map(([type, occupied]: any) => {
+                              const totalRooms =
+                                occupancyData[occupancyData.length - 1]
+                                  .roomsByType[type] || 0;
+                              const available = totalRooms - occupied;
+                              const rate = totalRooms
+                                ? Math.round((occupied / totalRooms) * 100)
+                                : 0;
+                              return (
+                                <TableRow key={type}>
+                                  <TableCell>{type}</TableCell>
+                                  <TableCell>{occupied}</TableCell>
+                                  <TableCell>{available}</TableCell>
+                                  <TableCell>{rate}%</TableCell>
+                                </TableRow>
+                              );
+                            })
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={4}>No data</TableCell>
+                            </TableRow>
+                          )}
                         </TableBody>
                       </Table>
                     </CardContent>
                   </Card>
 
+                  {/* Static forecast for now */}
                   <Card>
                     <CardHeader>
                       <CardTitle>Projected Occupancy</CardTitle>
@@ -246,20 +371,27 @@ export default function ManagerDashboard() {
                         {[
                           { date: "Today", occupancy: 92, trend: "up" },
                           { date: "Tomorrow", occupancy: 88, trend: "down" },
-                          { date: "Feb 17", occupancy: 95, trend: "up" },
-                          { date: "Feb 18", occupancy: 82, trend: "down" },
-                          { date: "Feb 19", occupancy: 90, trend: "up" },
-                          { date: "Feb 20", occupancy: 87, trend: "down" },
-                          { date: "Feb 21", occupancy: 93, trend: "up" },
+                          { date: "Aug 17", occupancy: 95, trend: "up" },
+                          { date: "Aug 18", occupancy: 82, trend: "down" },
+                          { date: "Aug 19", occupancy: 90, trend: "up" },
+                          { date: "Aug 20", occupancy: 87, trend: "down" },
+                          { date: "Aug 21", occupancy: 93, trend: "up" },
                         ].map((day) => (
-                          <div key={day.date} className="flex items-center justify-between">
-                            <span className="text-sm font-medium">{day.date}</span>
+                          <div
+                            key={day.date}
+                            className="flex items-center justify-between"
+                          >
+                            <span className="text-sm font-medium">
+                              {day.date}
+                            </span>
                             <div className="flex items-center gap-2">
                               <span className="text-sm">{day.occupancy}%</span>
                               <TrendingUp
                                 className={cn(
                                   "h-4 w-4",
-                                  day.trend === "up" ? "text-green-500" : "text-red-500 rotate-180",
+                                  day.trend === "up"
+                                    ? "text-green-500"
+                                    : "text-red-500 rotate-180"
                                 )}
                               />
                             </div>
@@ -280,7 +412,9 @@ export default function ManagerDashboard() {
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                       <div>
                         <CardTitle>Revenue Analysis</CardTitle>
-                        <CardDescription>Track revenue across all sources</CardDescription>
+                        <CardDescription>
+                          Track revenue across all sources
+                        </CardDescription>
                       </div>
                       <div className="flex items-center gap-2">
                         <Popover>
@@ -289,14 +423,15 @@ export default function ManagerDashboard() {
                               variant="outline"
                               className={cn(
                                 "justify-start text-left font-normal",
-                                !dateRange.from && "text-muted-foreground",
+                                !dateRange.from && "text-muted-foreground"
                               )}
                             >
                               <CalendarIcon className="mr-2 h-4 w-4" />
                               {dateRange.from ? (
                                 dateRange.to ? (
                                   <>
-                                    {format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}
+                                    {format(dateRange.from, "LLL dd, y")} -{" "}
+                                    {format(dateRange.to, "LLL dd, y")}
                                   </>
                                 ) : (
                                   format(dateRange.from, "LLL dd, y")
@@ -312,8 +447,11 @@ export default function ManagerDashboard() {
                               mode="range"
                               defaultMonth={dateRange.from}
                               selected={dateRange}
-                              onSelect={setDateRange}
+                              onSelect={(range) => {
+                                if (range) setDateRange(range);
+                              }}
                               numberOfMonths={2}
+                              required={false}
                             />
                           </PopoverContent>
                         </Popover>
@@ -331,8 +469,19 @@ export default function ManagerDashboard() {
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="month" />
                           <YAxis />
-                          <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, ""]} />
-                          <Line type="monotone" dataKey="room" stroke="#3b82f6" strokeWidth={2} name="Room Revenue" />
+                          <Tooltip
+                            formatter={(value: number) => [
+                              `$${value.toLocaleString()}`,
+                              "",
+                            ]}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="room"
+                            stroke="#3b82f6"
+                            strokeWidth={2}
+                            name="Room Revenue"
+                          />
                           <Line
                             type="monotone"
                             dataKey="restaurant"
@@ -357,56 +506,80 @@ export default function ManagerDashboard() {
                   <Card>
                     <CardHeader>
                       <CardTitle>Revenue Breakdown</CardTitle>
-                      <CardDescription>Current month performance</CardDescription>
+                      <CardDescription>
+                        Current month performance
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                            <span className="text-sm">Room Revenue</span>
-                          </div>
-                          <span className="font-semibold">$67,000</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                            <span className="text-sm">Restaurant</span>
-                          </div>
-                          <span className="font-semibold">$18,000</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                            <span className="text-sm">Other Services</span>
-                          </div>
-                          <span className="font-semibold">$4,500</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                            <span className="text-sm">No-shows</span>
-                          </div>
-                          <span className="font-semibold text-red-600">-$2,100</span>
-                        </div>
-                      </div>
+                      {/* Example: show most recent month breakdown */}
+                      {revenueData.length > 0 ? (
+                        (() => {
+                          const lastMonth = revenueData[revenueData.length - 1];
+                          return (
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                  <span className="text-sm">Room Revenue</span>
+                                </div>
+                                <span className="font-semibold">
+                                  ${lastMonth.room?.toLocaleString() ?? 0}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                  <span className="text-sm">Restaurant</span>
+                                </div>
+                                <span className="font-semibold">
+                                  ${lastMonth.restaurant?.toLocaleString() ?? 0}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                  <span className="text-sm">
+                                    Other Services
+                                  </span>
+                                </div>
+                                <span className="font-semibold">
+                                  ${lastMonth.other?.toLocaleString() ?? 0}
+                                </span>
+                              </div>
+                              {/* Add any other breakdowns as needed */}
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div>No data available</div>
+                      )}
                     </CardContent>
                   </Card>
 
                   <Card>
                     <CardHeader>
                       <CardTitle>Performance Metrics</CardTitle>
-                      <CardDescription>Key performance indicators</CardDescription>
+                      <CardDescription>
+                        Key performance indicators
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <span className="text-sm">Average Daily Rate</span>
-                          <span className="font-semibold">$185</span>
+                          <span className="font-semibold">
+                            {loading
+                              ? "Loading..."
+                              : `$${averageDailyRate.toFixed(2)}`}
+                          </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-sm">Revenue per Room</span>
-                          <span className="font-semibold">$156</span>
+                          <span className="font-semibold">
+                            {loading
+                              ? "Loading..."
+                              : `$${revenuePerRoom.toFixed(2)}`}
+                          </span>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-sm">Guest Satisfaction</span>
@@ -426,5 +599,5 @@ export default function ManagerDashboard() {
         </div>
       </div>
     </div>
-  )
+  );
 }
