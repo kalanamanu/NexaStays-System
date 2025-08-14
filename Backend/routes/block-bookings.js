@@ -10,7 +10,7 @@ router.use((req, res, next) => {
     next();
 });
 
-// POST: Create a block booking
+// Create a block booking
 router.post("/", authenticateToken, async (req, res) => {
     if (!req.user || req.user.role !== "travel-company") {
         return res.status(403).json({ error: "Unauthorized" });
