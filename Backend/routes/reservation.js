@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { authenticateToken, authenticateClerkToken } = require("../middleware/authenticateToken");
 
-// POST: Create hotel room reservation
+// Create hotel room reservation
 router.post("/", authenticateToken, async (req, res) => {
     const {
         roomType,
