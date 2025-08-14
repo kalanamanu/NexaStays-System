@@ -62,4 +62,4 @@ cron.schedule("0 19 * * *", async () => {
     );
 });
 
-module.exports = {}; // So you can require this file in app.js
+module.exports = {}; 

@@ -24,9 +24,7 @@ router.get("/occupancy", async (req, res) => {
     const days = eachDayOfInterval({ start, end });
     const data = [];
 
-    // For each day, calculate "Occupied" by counting rooms with status 'occupied'
     for (const day of days) {
-        // For table: use up-to-date Room.status (not reservation status)
         const byType = {};
         for (const type of roomTypes) {
             byType[type] = rooms.filter(r => r.type === type && r.status === "occupied").length;

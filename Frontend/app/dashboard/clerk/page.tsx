@@ -199,7 +199,7 @@ export default function ClerkDashboard() {
       const res = await fetch("http://localhost:5000/api/rooms/available");
       const data = await res.json();
       setAvailableRooms(data);
-      setRooms(data); // Optionally setRooms if you want to use all rooms elsewhere
+      setRooms(data);
     }
     fetchRooms();
   }, []);
