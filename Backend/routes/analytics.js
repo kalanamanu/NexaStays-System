@@ -29,8 +29,6 @@ router.get("/occupancy", async (req, res) => {
         for (const type of roomTypes) {
             byType[type] = rooms.filter(r => r.type === type && r.status === "occupied").length;
         }
-
-        // For chart: calculate occupancy percentage using rooms with status 'occupied'
         const totalRooms = rooms.length;
         const occupiedRooms = rooms.filter(r => r.status === "occupied").length;
 
