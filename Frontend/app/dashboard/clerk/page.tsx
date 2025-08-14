@@ -109,9 +109,9 @@ interface Bill {
   club: number;
   other: number;
   lateCheckout: number;
-  total: number;
+  total?: number; // <-- optional now
+  reservationId?: string;
 }
-
 interface ReservationForm {
   guestName: string;
   email: string;
@@ -188,6 +188,10 @@ export default function ClerkDashboard() {
   const [noShowTarget, setNoShowTarget] = useState<Reservation | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  const [lastBill, setLastBill] = useState<Bill | null>(null);
+  const [receiptMode, setReceiptMode] = useState<"preview" | "final">(
+    "preview"
+  );
 
   //Get all available rooms
   useEffect(() => {
@@ -267,6 +271,8 @@ export default function ClerkDashboard() {
               ? `${r.customer.firstName} ${r.customer.lastName}`
               : r.guestName || "-",
             phoneNumber: r.customer?.phone || r.phoneNumber || "-",
+            arrivalDate: r.arrivalDate?.slice(0, 10), // <--- format to YYYY-MM-DD
+            departureDate: r.departureDate?.slice(0, 10), // <--- format to YYYY-MM-DD
           })
         );
 
@@ -396,6 +402,10 @@ export default function ClerkDashboard() {
     setShowReservationDialog(false);
   }
 
+  const [originalDepartureDate, setOriginalDepartureDate] = useState<
+    string | null
+  >(null);
+
   // Auto-cancel and no-show simulation: Mark reservations for today without credit card as auto-cancelled after 7 PM.
   useEffect(() => {
     // Simulate: At 7 PM, auto-cancel pending/confirmed reservations for today without credit card
@@ -482,6 +492,35 @@ export default function ClerkDashboard() {
     });
     setShowReservationDialog(true);
   }
+
+  // Daily revenue and Occupancy
+  useEffect(() => {
+    // Calculate for "previous night"
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+
+    // Occupancy: rooms that were checked in and still present yesterday night
+    const occ = reservations.filter(
+      (r) =>
+        r.status === "checked-in" &&
+        isAfter(new Date(r.departureDate), yesterday) &&
+        isBefore(new Date(r.arrivalDate), now)
+    ).length;
+
+    // Revenue: total for rooms checked out yesterday
+    const rev = reservations
+      .filter(
+        (r) =>
+          r.status === "checked-out" &&
+          isAfter(new Date(r.departureDate), yesterday) &&
+          isBefore(new Date(r.departureDate), now)
+      )
+      .reduce((sum, r) => sum + r.totalAmount, 0);
+
+    setTodayOccupancy(occ);
+    setTodayRevenue(rev);
+  }, [reservations]);
 
   function handleReservationFormChange(field: string, value: string) {
     setReservationForm((prev) => {
@@ -781,6 +820,8 @@ export default function ClerkDashboard() {
             ? `${r.customer.firstName} ${r.customer.lastName}`
             : r.guestName || "-",
           phoneNumber: r.customer?.phone || r.phoneNumber || "-",
+          arrivalDate: r.arrivalDate?.slice(0, 10), // <--- format to YYYY-MM-DD
+          departureDate: r.departureDate?.slice(0, 10), // <--- format to YYYY-MM-DD
         })
       );
       setReservations(flatReservations);
@@ -840,6 +881,7 @@ export default function ClerkDashboard() {
     }
   }
 
+  // Set bill and original departure date when reservation changes
   useEffect(() => {
     if (!selectedReservation) {
       setCheckoutBill({
@@ -851,16 +893,14 @@ export default function ClerkDashboard() {
         club: 0,
         other: 0,
         lateCheckout: 0,
-        total: 0,
       });
+      setOriginalDepartureDate(null);
       return;
     }
     const res = reservations.find((r) => r.id === selectedReservation);
     if (res) {
-      setCheckoutBill((bill) => ({
-        ...bill,
+      setCheckoutBill({
         roomCharges: res.totalAmount,
-        // Optionally reset the others if switching reservations:
         restaurant: 0,
         roomService: 0,
         laundry: 0,
@@ -868,37 +908,65 @@ export default function ClerkDashboard() {
         club: 0,
         other: 0,
         lateCheckout: 0,
-        total: res.totalAmount, // optionally set total to roomCharges initially
+      });
+      setOriginalDepartureDate(res.departureDate);
+    }
+  }, [selectedReservation]);
+
+  // Only update roomCharges if check-out date is extended or changed
+  useEffect(() => {
+    if (!selectedReservation) return;
+    const res = reservations.find((r) => r.id === selectedReservation);
+    if (!res) return;
+
+    if (
+      originalDepartureDate &&
+      isAfter(new Date(res.departureDate), new Date(originalDepartureDate))
+    ) {
+      const room =
+        rooms.find(
+          (r) => r.type.toLowerCase() === res.roomType.toLowerCase()
+        ) ||
+        availableRooms.find(
+          (r) => r.type.toLowerCase() === res.roomType.toLowerCase()
+        );
+      const nightlyPrice = room?.pricePerNight || 0;
+      const rateType = res.rateType || "nightly";
+      const newRoomCharges = calculateRoomCharges(
+        nightlyPrice,
+        res.arrivalDate,
+        res.departureDate,
+        rateType
+      );
+      setCheckoutBill((prev) => ({
+        ...prev,
+        roomCharges: newRoomCharges,
+      }));
+    } else if (originalDepartureDate) {
+      setCheckoutBill((prev) => ({
+        ...prev,
+        roomCharges: res.totalAmount,
       }));
     }
-  }, [selectedReservation, reservations]);
-
-  // When any bill field changes, recalculate total
-  useEffect(() => {
-    setCheckoutBill((bill) => ({
-      ...bill,
-      total:
-        bill.roomCharges +
-        bill.restaurant +
-        bill.roomService +
-        bill.laundry +
-        bill.telephone +
-        bill.club +
-        bill.other +
-        bill.lateCheckout,
-    }));
   }, [
-    checkoutBill.roomCharges,
-    checkoutBill.restaurant,
-    checkoutBill.roomService,
-    checkoutBill.laundry,
-    checkoutBill.telephone,
-    checkoutBill.club,
-    checkoutBill.other,
-    checkoutBill.lateCheckout,
+    selectedReservation,
+    reservations,
+    originalDepartureDate,
+    rooms,
+    availableRooms,
   ]);
 
-  // Check-Out Logic
+  // Calculate total at render (not in state!)
+  const billTotal =
+    checkoutBill.roomCharges +
+    checkoutBill.restaurant +
+    checkoutBill.roomService +
+    checkoutBill.laundry +
+    checkoutBill.telephone +
+    checkoutBill.club +
+    checkoutBill.other +
+    checkoutBill.lateCheckout;
+
   async function handleCheckOut() {
     if (!selectedReservation || !paymentMethod) {
       toast({
@@ -944,11 +1012,9 @@ export default function ClerkDashboard() {
         lateFee,
       roomCharges: checkoutBill.roomCharges,
     };
-    setCheckoutBill(bill);
 
     try {
       const token = localStorage.getItem("token");
-      // 1. Mark reservation as checked-out, make room available, and save billing record
       const resCheckout = await fetch(
         "http://localhost:5000/api/reservations/checkout",
         {
@@ -968,12 +1034,20 @@ export default function ClerkDashboard() {
         const errData = await resCheckout.json();
         throw new Error(errData.error || "Checkout failed.");
       }
-      // 2. Refresh state
-      await fetchAllReservations();
-      await fetchAvailableRooms();
+      // 1. Set lastBill and receipt mode BEFORE opening dialog
+      setLastBill(bill);
+      setReceiptMode("final");
       setShowBillDialog(true);
+
+      // 2. Optionally reset related states
       setSelectedReservation("");
       setPaymentMethod("");
+      // setCheckoutBill(defaultBillState); // reset after setting lastBill if you want
+
+      // 3. Refresh state
+      await fetchAllReservations();
+      await fetchAvailableRooms();
+
       toast({
         title: "Check-out Successful",
         description: "Guest has been checked out and receipt generated.",
@@ -1038,6 +1112,41 @@ export default function ClerkDashboard() {
         reservationForm.rateType
       )
     : 0;
+
+  function handleCheckoutDateChange(newDate: string) {
+    if (!selectedReservation) return;
+    const res = reservations.find((r) => r.id === selectedReservation);
+    if (!res || !newDate) return;
+
+    // Only recalculate if the new date is after the original departure
+    if (
+      originalDepartureDate &&
+      isAfter(new Date(newDate), new Date(originalDepartureDate))
+    ) {
+      // Find the room for price lookup
+      const room = rooms.find((r) => r.type === res.roomType);
+      const nightlyPrice = room?.pricePerNight || 0;
+      // The rateType can be nightly/weekly/monthly; use res.rateType or default to nightly
+      const rateType = res.rateType || "nightly";
+      // Calculate room charges for the new duration
+      const newRoomCharges = calculateRoomCharges(
+        nightlyPrice,
+        res.arrivalDate,
+        newDate,
+        rateType
+      );
+      setCheckoutBill((prev) => ({
+        ...prev,
+        roomCharges: newRoomCharges,
+      }));
+    } else if (originalDepartureDate) {
+      // If moved back to the original or earlier, revert to original room charge
+      setCheckoutBill((prev) => ({
+        ...prev,
+        roomCharges: res.totalAmount,
+      }));
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
@@ -1281,6 +1390,8 @@ export default function ClerkDashboard() {
                                   : r
                               )
                             );
+                            // ADD THIS:
+                            handleCheckoutDateChange(e.target.value);
                           }}
                         />
                         <span className="text-xs text-gray-500">
@@ -1416,23 +1527,26 @@ export default function ClerkDashboard() {
                           onOpenChange={setShowBillDialog}
                         >
                           <DialogTrigger asChild>
-                            <Button variant="outline">
+                            {/* <Button variant="outline">
                               <FileText className="h-4 w-4 mr-2" />
                               Preview Receipt
-                            </Button>
+                            </Button> */}
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
                               <DialogTitle>Receipt Preview</DialogTitle>
                               <DialogDescription>
                                 Guest receipt for reservation{" "}
-                                {selectedReservation}
+                                {receiptMode === "final"
+                                  ? lastBill?.reservationId ??
+                                    selectedReservation
+                                  : selectedReservation}
                               </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-4">
                               <div className="text-center">
                                 <h3 className="text-lg font-bold">
-                                  HotelChain
+                                  Nexa Stays
                                 </h3>
                                 <p className="text-sm text-gray-600">
                                   Thank you for staying with us!
@@ -1440,53 +1554,78 @@ export default function ClerkDashboard() {
                               </div>
                               <Separator />
                               <div className="space-y-2">
-                                <div className="flex justify-between">
-                                  <span>Room Charges</span>
-                                  <span>${checkoutBill.roomCharges}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Restaurant</span>
-                                  <span>${checkoutBill.restaurant}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Room Service</span>
-                                  <span>${checkoutBill.roomService}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Laundry</span>
-                                  <span>${checkoutBill.laundry}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Telephone</span>
-                                  <span>${checkoutBill.telephone}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Club Facility</span>
-                                  <span>${checkoutBill.club}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Other</span>
-                                  <span>${checkoutBill.other}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span>Late Checkout</span>
-                                  <span>${checkoutBill.lateCheckout}</span>
-                                </div>
-                                <Separator />
-                                <div className="flex justify-between font-bold">
-                                  <span>Total</span>
-                                  <span>
-                                    $
-                                    {checkoutBill.roomCharges +
-                                      checkoutBill.restaurant +
-                                      checkoutBill.roomService +
-                                      checkoutBill.laundry +
-                                      checkoutBill.telephone +
-                                      checkoutBill.club +
-                                      checkoutBill.other +
-                                      checkoutBill.lateCheckout}
-                                  </span>
-                                </div>
+                                {/**
+                                 * Choose which bill object to display:
+                                 * - If in "final" mode after checkout, use lastBill (frozen)
+                                 * - If in "preview" mode before checkout, use checkoutBill (editable)
+                                 */}
+                                {(() => {
+                                  const billToShow =
+                                    receiptMode === "final" && lastBill
+                                      ? lastBill
+                                      : checkoutBill;
+                                  return (
+                                    <>
+                                      <div className="flex justify-between">
+                                        <span>Room Charges</span>
+                                        <span>
+                                          ${billToShow.roomCharges ?? 0}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Restaurant</span>
+                                        <span>
+                                          ${billToShow.restaurant ?? 0}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Room Service</span>
+                                        <span>
+                                          ${billToShow.roomService ?? 0}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Laundry</span>
+                                        <span>${billToShow.laundry ?? 0}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Telephone</span>
+                                        <span>
+                                          ${billToShow.telephone ?? 0}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Club Facility</span>
+                                        <span>${billToShow.club ?? 0}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Other</span>
+                                        <span>${billToShow.other ?? 0}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Late Checkout</span>
+                                        <span>
+                                          ${billToShow.lateCheckout ?? 0}
+                                        </span>
+                                      </div>
+                                      <Separator />
+                                      <div className="flex justify-between font-bold">
+                                        <span>Total</span>
+                                        <span>
+                                          $
+                                          {(billToShow.roomCharges ?? 0) +
+                                            (billToShow.restaurant ?? 0) +
+                                            (billToShow.roomService ?? 0) +
+                                            (billToShow.laundry ?? 0) +
+                                            (billToShow.telephone ?? 0) +
+                                            (billToShow.club ?? 0) +
+                                            (billToShow.other ?? 0) +
+                                            (billToShow.lateCheckout ?? 0)}
+                                        </span>
+                                      </div>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </div>
                             <DialogFooter>
@@ -2101,7 +2240,6 @@ export default function ClerkDashboard() {
             <div>
               <span className="font-bold">Revenue:</span> ${todayRevenue}
             </div>
-            {/* Add more analytics as needed */}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setReportDialog(false)}>
