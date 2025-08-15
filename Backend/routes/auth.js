@@ -177,7 +177,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     console.log("[/api/me] req.user", req.user);
     try {
         const user = await prisma.user.findUnique({
-            where: { id: req.user.id }, // FIXED: Use id, not userId
+            where: { id: req.user.id },
             include: {
                 customerProfile: true,
                 travelCompanyProfile: true,
