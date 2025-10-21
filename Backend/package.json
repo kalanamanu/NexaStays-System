@@ -3,13 +3,23 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "type": "commonjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "migrate:dev": "npx prisma migrate dev --name init",
+    "migrate:deploy": "npx prisma migrate deploy",
+    "db:push": "npx prisma db push",
+    "prisma:generate": "npx prisma generate",
+    "seed:hotels": "node prisma/seed-hotels.js",
+    "seed:rooms": "node prisma/seed-rooms.js",
+    "seed": "npm run seed:hotels && npm run seed:rooms",
+    "prisma:seed": "npm run seed",
+    "studio": "npx prisma studio"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^6.13.0",
     "bcrypt": "^6.0.0",
@@ -23,9 +33,10 @@
     "stripe": "^18.4.0"
   },
   "devDependencies": {
-    "prisma": "^6.13.0"
+    "prisma": "^6.13.0",
+    "nodemon": "^2.0.22"
   },
   "prisma": {
-    "seed": "node prisma/seed.js"
+    "seed": "npm run seed"
   }
 }

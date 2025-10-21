@@ -1,7 +1,41 @@
-const { PrismaClient } = require('@prisma/client');
+"use strict";
+
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
+/**
+ * Seed script: creates (or reuses) a "main" hotel and upserts rooms for that hotel.
+ *
+ * Notes:
+ * - After you added Hotel and the @@unique([hotelId, number]) constraint to Room,
+ *   room numbers are unique per-hotel. This script upserts by the composite key.
+ * - Run with: node prisma/seed-rooms.js
+ * - Or add to package.json prisma.seed and run via: npx prisma db seed (if configured)
+ */
+
 async function main() {
+    // 1) Ensure a hotel exists to attach rooms to
+    const hotelSlug = "nexa-stays-main";
+    const hotel = await prisma.hotel.upsert({
+        where: { slug: hotelSlug },
+        update: {},
+        create: {
+            name: "Nexa Stays - Main Hotel",
+            slug: hotelSlug,
+            description: "Primary seeded hotel for development and testing.",
+            address: "123 Harbor Drive, Suite 400",
+            city: "Cityname",
+            country: "Country",
+            starRating: 4.6,
+            amenities: ["wifi", "pool", "gym"],
+            images: ["/images/hotel-1.jpg"],
+        },
+    });
+
+    const hotelId = hotel.id;
+    console.log(`Using hotel id=${hotelId} (slug=${hotelSlug})`);
+
+    // 2) Rooms to create / upsert (same as you provided; all will be attached to the hotel above)
     const rooms = [
         // Existing rooms
         { number: "101", type: "Standard", status: "available" },
@@ -73,21 +107,53 @@ async function main() {
         { number: "411", type: "Residential Suite", status: "available" },
         { number: "412", type: "Residential Suite", status: "available" },
         { number: "413", type: "Residential Suite", status: "available" },
-        { number: "414", type: "Residential Suite", status: "available" }
+        { number: "414", type: "Residential Suite", status: "available" },
     ];
 
-    for (const room of rooms) {
-        await prisma.room.upsert({
-            where: { number: room.number },
-            update: {},
-            create: room,
-        });
+    // Helper to pick a sensible default price if none provided
+    function defaultPriceFor(type) {
+        const t = (type || "").toLowerCase();
+        if (t.includes("residential")) return 450;
+        if (t.includes("suite")) return 280;
+        if (t.includes("deluxe")) return 180;
+        return 120;
     }
-    console.log('Rooms seeded!');
+
+    // 3) Upsert each room using the composite unique (hotelId + number).
+    //    Prisma supports composite upsert where we use the compound name hotelId_number.
+    for (const r of rooms) {
+        const price = r.pricePerNight ?? defaultPriceFor(r.type);
+        try {
+            await prisma.room.upsert({
+                where: {
+                    // compound unique field generated from @@unique([hotelId, number])
+                    hotelId_number: { hotelId: hotelId, number: r.number },
+                },
+                update: {
+                    type: r.type,
+                    status: r.status,
+                    pricePerNight: price,
+                    // keep the hotel relation intact (no change)
+                },
+                create: {
+                    number: r.number,
+                    type: r.type,
+                    status: r.status,
+                    pricePerNight: price,
+                    hotel: { connect: { id: hotelId } },
+                },
+            });
+            console.log(`Upserted room ${r.number}`);
+        } catch (err) {
+            console.error(`Failed to upsert room ${r.number}:`, err.message || err);
+        }
+    }
+
+    console.log("Rooms seeded/updated for hotel:", hotel.name);
 }
 
 main()
-    .catch(e => {
+    .catch((e) => {
         console.error(e);
         process.exit(1);
     })
