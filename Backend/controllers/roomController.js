@@ -1,10 +1,16 @@
-const express = require("express");
-const router = express.Router();
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-// GET /api/rooms - fetch all rooms with pricePerNight
-router.get("/", async (req, res) => {
+/**
+ * Room controller
+ * - getAllRooms: returns all rooms with pricePerNight
+ * - getAvailableRooms: returns only rooms with status === "available"
+ *
+ * Note: Consider re-using a single PrismaClient instance across the app
+ * (for example export prisma from a db.js) to avoid too many connections.
+ */
+
+async function getAllRooms(req, res) {
     try {
         const rooms = await prisma.room.findMany({
             orderBy: [
@@ -17,19 +23,16 @@ router.get("/", async (req, res) => {
                 type: true,
                 status: true,
                 pricePerNight: true,
-            }
+            },
         });
         res.json(rooms);
     } catch (error) {
-        console.error("Error fetching rooms:", error);
+        console.error("getAllRooms error:", error);
         res.status(500).json({ error: "Failed to fetch rooms" });
     }
-});
+}
 
-module.exports = router;
-
-//Get all the available rooms 
-router.get("/available", async (req, res) => {
+async function getAvailableRooms(req, res) {
     try {
         const rooms = await prisma.room.findMany({
             where: { status: "available" },
@@ -43,10 +46,16 @@ router.get("/available", async (req, res) => {
                 type: true,
                 status: true,
                 pricePerNight: true,
-            }
+            },
         });
         res.json(rooms);
     } catch (error) {
+        console.error("getAvailableRooms error:", error);
         res.status(500).json({ error: "Failed to fetch available rooms" });
     }
-});
+}
+
+module.exports = {
+    getAllRooms,
+    getAvailableRooms,
+};

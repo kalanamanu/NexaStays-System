@@ -1,247 +1,229 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, Moon, Sun, LogOut, Hotel, Sparkles } from "lucide-react";
+import { Menu, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useUser } from "@/context/user-context";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import UserMenu from "@/components/ui/UserMenu";
+
+/**
+ * NavBar
+ * - Left: Brand (Nexa Stays)
+ * - Middle: Primary navigation (Home, Our Hotels, About, Contact Us)
+ * - Right: Theme toggle + Login/Register (if logged out) OR UserMenu (when logged in)
+ *
+ * Save this file as: components/nav-bar.tsx
+ */
 
 export default function NavBar() {
-  const { user, logout } = useUser();
+  const { user } = useUser();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const handleLogout = () => {
-    logout();
-    router.push("/login");
-  };
-
-  const getNavLinks = () => {
-    if (!user) {
-      return [
-        { href: "/register", label: "Register" },
-        { href: "/login", label: "Login" },
-      ];
-    }
-
-    switch (user.role) {
-      case "customer":
-        return [
-          { href: "/", label: "Home" },
-          { href: "/reservation", label: "Make Reservation" },
-          { href: "/dashboard/customer", label: "My Bookings" },
-        ];
-      case "clerk":
-        return [
-          { href: "/", label: "Home" },
-          { href: "/dashboard/clerk", label: "Check-In/Out" },
-          { href: "/dashboard/clerk?tab=reservations", label: "Reservations" },
-        ];
-      case "manager":
-        return [
-          { href: "/", label: "Home" },
-          { href: "/dashboard/manager", label: "Reports" },
-        ];
-      case "travel-company":
-        return [
-          { href: "/", label: "Home" },
-          { href: "/travel-portal", label: "Block Bookings" },
-        ];
-      default:
-        return [{ href: "/", label: "Home" }];
-    }
-  };
-
-  const navLinks = getNavLinks();
-
-  const NavLinks = ({ mobile = false }) => (
-    <AnimatePresence>
-      {navLinks.map((link, index) => (
-        <motion.div
-          key={link.href}
-          initial={{ opacity: 0, y: mobile ? 20 : -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: mobile ? 20 : -20 }}
-          transition={{ delay: index * 0.1 }}
-        >
-          <Link
-            href={link.href}
-            className={`${
-              mobile
-                ? "block px-4 py-3 text-base font-medium"
-                : "px-4 py-2 text-sm font-medium"
-            } text-white hover:text-purple-200 hover:bg-white/10 rounded-lg transition-all duration-300 backdrop-blur-sm`}
-            onClick={() => mobile && setIsOpen(false)}
-          >
-            {link.label}
-          </Link>
-        </motion.div>
-      ))}
-    </AnimatePresence>
-  );
+  const primaryNav = [
+    { href: "/", label: "Home" },
+    { href: "/hotels", label: "Our Hotels" },
+    { href: "/about", label: "About" },
+    { href: "/contact", label: "Contact Us" },
+  ];
 
   if (!mounted) return null;
 
   return (
     <motion.nav
-      initial={{ y: -100 }}
+      initial={{ y: -80 }}
       animate={{ y: 0 }}
       transition={{ type: "spring", stiffness: 100, damping: 20 }}
       className="bg-gradient-to-r from-purple-600 via-purple-700 to-indigo-700 text-white shadow-2xl sticky top-0 z-50 backdrop-blur-md border-b border-white/10"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          {/* Logo */}
-          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link href="/" className="flex items-center space-x-3 group">
-              <motion.div
-                transition={{
-                  duration: 20,
-                  repeat: Number.POSITIVE_INFINITY,
-                  ease: "linear",
-                }}
-                className="relative"
-              ></motion.div>
+        <div className="flex items-center h-16 justify-between">
+          {/* Left: Brand */}
+          <div className="flex items-center flex-1">
+            <Link href="/" className="flex items-center space-x-3">
               <span className="text-2xl font-bold bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">
                 Nexa Stays
               </span>
             </Link>
-          </motion.div>
+          </div>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-2">
-            <NavLinks />
+          {/* Middle: Primary navigation (visible on md+) */}
+          <div className="hidden md:flex items-center justify-center flex-1">
+            <div className="flex items-center space-x-4">
+              {primaryNav.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="px-4 py-2 text-sm font-medium text-white hover:text-purple-200 hover:bg-white/10 rounded-lg transition-all duration-200 backdrop-blur-sm"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </div>
 
-            {/* Theme Toggle */}
-            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                className="text-white hover:bg-white/10 hover:text-purple-200 transition-all duration-300"
-              >
-                <AnimatePresence mode="wait">
-                  {theme === "dark" ? (
-                    <motion.div
-                      key="sun"
-                      initial={{ rotate: -90, opacity: 0 }}
-                      animate={{ rotate: 0, opacity: 1 }}
-                      exit={{ rotate: 90, opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <Sun className="h-5 w-5" />
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="moon"
-                      initial={{ rotate: 90, opacity: 0 }}
-                      animate={{ rotate: 0, opacity: 1 }}
-                      exit={{ rotate: -90, opacity: 0 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <Moon className="h-5 w-5" />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                <span className="sr-only">Toggle theme</span>
-              </Button>
-            </motion.div>
-
-            {/* Logout Button */}
-            {user && (
+          {/* Right: Theme toggle + auth / user */}
+          <div className="flex items-center justify-end flex-1 space-x-2">
+            <div className="flex items-center space-x-2">
+              {/* Theme Toggle */}
               <motion.div
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
                 <Button
-                  onClick={handleLogout}
                   variant="ghost"
-                  className="text-white hover:bg-red-500/20 hover:text-red-200 transition-all duration-300 border border-white/20 hover:border-red-300/50"
+                  size="icon"
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  className="text-white hover:bg-white/10 hover:text-purple-200 transition-all duration-200"
                 >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
+                  {theme === "dark" ? (
+                    <Sun className="h-5 w-5" />
+                  ) : (
+                    <Moon className="h-5 w-5" />
+                  )}
+                  <span className="sr-only">Toggle theme</span>
                 </Button>
               </motion.div>
-            )}
-          </div>
 
-          {/* Mobile Navigation */}
-          <div className="md:hidden">
-            <Sheet open={isOpen} onOpenChange={setIsOpen}>
-              <SheetTrigger asChild>
-                <motion.div
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                >
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-white hover:bg-white/10"
-                  >
-                    <Menu className="h-6 w-6" />
-                  </Button>
-                </motion.div>
-              </SheetTrigger>
-              <SheetContent
-                side="right"
-                className="bg-gradient-to-b from-purple-600 to-indigo-700 text-white border-purple-500/20 backdrop-blur-md"
-              >
-                <motion.div
-                  initial={{ opacity: 0, x: 50 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="flex flex-col space-y-4 mt-8"
-                >
-                  <NavLinks mobile />
-
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
+              {/* Auth buttons (when logged out) or UserMenu (when logged in) */}
+              {user ? (
+                <UserMenu />
+              ) : (
+                <div className="hidden sm:flex items-center space-x-2">
+                  <Link href="/login">
                     <Button
                       variant="ghost"
-                      onClick={() =>
-                        setTheme(theme === "dark" ? "light" : "dark")
-                      }
-                      className="justify-start text-white hover:bg-white/10 w-full"
+                      className="text-white hover:bg-white/10"
                     >
-                      {theme === "dark" ? (
-                        <Sun className="h-4 w-4 mr-2" />
-                      ) : (
-                        <Moon className="h-4 w-4 mr-2" />
-                      )}
-                      Toggle Theme
+                      Login
                     </Button>
-                  </motion.div>
+                  </Link>
+                  <Link href="/register">
+                    <Button className="bg-white/10 text-white border border-white/10 hover:bg-white/20">
+                      Register
+                    </Button>
+                  </Link>
+                </div>
+              )}
 
-                  {user && (
+              {/* Mobile: menu button */}
+              <div className="md:hidden">
+                <Sheet open={isOpen} onOpenChange={setIsOpen}>
+                  <SheetTrigger asChild>
                     <motion.div
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
                       <Button
-                        onClick={handleLogout}
                         variant="ghost"
-                        className="justify-start text-white hover:bg-red-500/20 w-full border border-white/20 hover:border-red-300/50"
+                        size="icon"
+                        className="text-white hover:bg-white/10"
                       >
-                        <LogOut className="h-4 w-4 mr-2" />
-                        Logout
+                        <Menu className="h-6 w-6" />
                       </Button>
                     </motion.div>
-                  )}
-                </motion.div>
-              </SheetContent>
-            </Sheet>
+                  </SheetTrigger>
+
+                  <SheetContent
+                    side="right"
+                    className="bg-gradient-to-b from-purple-600 to-indigo-700 text-white border-purple-500/20 backdrop-blur-md"
+                  >
+                    <div className="mt-6 px-4">
+                      {/* Mobile profile preview when logged in */}
+                      {user && (
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-white font-semibold">
+                              {user.customerProfile
+                                ? `${(
+                                    user.customerProfile.firstName ?? "U"
+                                  ).charAt(0)}${(
+                                    user.customerProfile.lastName ?? ""
+                                  ).charAt(0)}`
+                                : user.email.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium">
+                                {user.customerProfile
+                                  ? `${user.customerProfile.firstName} ${user.customerProfile.lastName}`
+                                  : user.email.split("@")[0]}
+                              </div>
+                              <div className="text-xs text-white/60 capitalize">
+                                {user.role}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Primary nav (mobile) */}
+                      <nav className="space-y-2">
+                        {primaryNav.map((link) => (
+                          <Link
+                            key={link.href}
+                            href={link.href}
+                            className="block rounded-md px-4 py-3 text-base font-medium text-white hover:bg-white/5"
+                            onClick={() => setIsOpen(false)}
+                          >
+                            {link.label}
+                          </Link>
+                        ))}
+                      </nav>
+
+                      <div className="pt-4 border-t border-white/6 mt-4">
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start text-white hover:bg-white/5"
+                          onClick={() => {
+                            setTheme(theme === "dark" ? "light" : "dark");
+                            setIsOpen(false);
+                          }}
+                        >
+                          {theme === "dark" ? (
+                            <Sun className="h-4 w-4 mr-2" />
+                          ) : (
+                            <Moon className="h-4 w-4 mr-2" />
+                          )}
+                          Toggle Theme
+                        </Button>
+
+                        {user ? (
+                          <div className="mt-3">
+                            <UserMenu compact />
+                          </div>
+                        ) : (
+                          <div className="mt-3 space-y-2">
+                            <Link
+                              href="/login"
+                              onClick={() => setIsOpen(false)}
+                            >
+                              <Button variant="outline" className="w-full">
+                                Login
+                              </Button>
+                            </Link>
+                            <Link
+                              href="/register"
+                              onClick={() => setIsOpen(false)}
+                            >
+                              <Button className="w-full">Register</Button>
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </div>
+            </div>
           </div>
         </div>
       </div>

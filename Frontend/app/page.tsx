@@ -22,7 +22,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import NavBar from "@/components/nav-bar";
+import HotelsSection from "@/components/HotelSection";
 import { motion, easeInOut } from "framer-motion";
+import Footer from "@/components/Footer";
 
 // Updated taglines for Nexa Stays
 const taglines = [
@@ -465,133 +467,10 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Stats Section */}
-        <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 text-white relative overflow-hidden">
-          <div className="absolute inset-0">
-            <motion.div
-              animate={{ x: [-100, 100, -100] }}
-              transition={{
-                duration: 20,
-                repeat: Number.POSITIVE_INFINITY,
-                ease: "linear",
-              }}
-              className="absolute top-10 left-10 w-32 h-32 bg-white/5 rounded-full blur-xl"
-            />
-            <motion.div
-              animate={{ x: [100, -100, 100] }}
-              transition={{
-                duration: 25,
-                repeat: Number.POSITIVE_INFINITY,
-                ease: "linear",
-              }}
-              className="absolute bottom-10 right-10 w-40 h-40 bg-white/5 rounded-full blur-xl"
-            />
-          </div>
+        {/* INSERTED: Our Hotels Section */}
+        <HotelsSection />
 
-          <div className="max-w-7xl mx-auto relative z-10">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-              viewport={{ once: true }}
-              className="text-center mb-16"
-            >
-              <h2 className="text-4xl md:text-5xl font-bold mb-4">
-                Trusted by Millions Worldwide
-              </h2>
-              <p className="text-xl text-purple-100 max-w-3xl mx-auto">
-                Join our community of satisfied guests who choose convenience
-                and excellence
-              </p>
-            </motion.div>
-
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              className="grid grid-cols-2 md:grid-cols-4 gap-8"
-            >
-              {[
-                { number: "500+", label: "Premium Hotels", icon: Hotel },
-                { number: "2M+", label: "Happy Guests", icon: Users },
-                { number: "150+", label: "Countries", icon: MapPin },
-                { number: "4.9★", label: "Guest Rating", icon: Star },
-              ].map((stat, index) => (
-                <motion.div
-                  key={stat.label}
-                  variants={itemVariants}
-                  whileHover={{ scale: 1.1 }}
-                  className="text-center"
-                >
-                  <motion.div
-                    transition={{
-                      duration: 10,
-                      repeat: Number.POSITIVE_INFINITY,
-                      ease: "linear",
-                    }}
-                    className="w-16 h-16 mx-auto mb-4 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-sm"
-                  >
-                    <stat.icon className="h-8 w-8 text-white" />
-                  </motion.div>
-                  <div className="text-4xl md:text-5xl font-bold mb-2">
-                    {stat.number}
-                  </div>
-                  <div className="text-purple-100 text-lg">{stat.label}</div>
-                </motion.div>
-              ))}
-            </motion.div>
-          </div>
-        </section>
-
-        {/* Footer */}
-        <footer className="bg-gray-900 text-white py-16 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-purple-900/20 to-indigo-900/20"></div>
-          <div className="max-w-7xl mx-auto text-center relative z-10">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-              viewport={{ once: true }}
-            >
-              <div className="flex items-center justify-center space-x-3 mb-6">
-                <span className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
-                  Nexa Stays
-                </span>
-              </div>
-              <p className="text-gray-300 mb-8 text-lg max-w-2xl mx-auto">
-                Your comfort is our priority. Experience hospitality redefined
-                with convenience, efficiency, and unmatched service.
-              </p>
-              <div className="flex justify-center space-x-8 text-gray-400">
-                {["Privacy Policy", "Terms of Service", "Contact Us"].map(
-                  (link, index) => (
-                    <motion.a
-                      key={link}
-                      href="#"
-                      whileHover={{ scale: 1.1, color: "#a855f7" }}
-                      transition={{ duration: 0.2 }}
-                      className="hover:text-purple-400 transition-colors duration-300"
-                    >
-                      {link}
-                    </motion.a>
-                  )
-                )}
-              </div>
-              <motion.div
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="mt-8 pt-8 border-t border-gray-700"
-              >
-                <p className="text-gray-500">
-                  © 2024 Nexa Stays. All rights reserved. Crafted with ❤️ for
-                  modern travelers.
-                </p>
-              </motion.div>
-            </motion.div>
-          </div>
-        </footer>
+        <Footer />
       </div>
     </div>
   );

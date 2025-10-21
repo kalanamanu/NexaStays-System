@@ -2,32 +2,29 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const authRoutes = require('./routes/auth');
-const customerProfileRoutes = require("./routes/customer-profile");
-const reservationRoutes = require("./routes/reservation");
+const authRoutes = require('./routes/authRoutes');
+const customerProfileRoutes = require('./routes/customerProfileRoutes');
+const reservationRoutes = require('./routes/reservationRoutes');
 require('./cron/reservationTasks');
-const blockBookingRoutes = require("./routes/block-bookings");
-const roomRoutes = require("./routes/room");
-const analyticsRoutes = require("./routes/analytics");
-
+const blockBookingRoutes = require('./routes/blockBookingRoutes');
+const roomRoutes = require('./routes/roomRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
 const app = express();
 
 app.use(cors());
+
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/customer-profile', customerProfileRoutes);
-app.use("/api/reservations", reservationRoutes);
+app.use('/api/reservations', reservationRoutes);
 app.use('/api/block-bookings', blockBookingRoutes);
-app.use("/api/rooms", roomRoutes);
-app.use("/api/analytics", analyticsRoutes);
+app.use('/api/rooms', roomRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'ok' });
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+module.exports = app;

@@ -1,3 +1,5 @@
+// name=prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -6,6 +8,19 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+/*
+  Updated Prisma schema: added Hotel model and wired foreign keys/relations.
+
+  Summary of changes:
+  - Added Hotel model with fields for address, location, images, amenities, starRating.
+  - Linked Hotel <-> Room (one-to-many).
+  - Linked Hotel <-> Reservation (one-to-many).
+  - Optional owner relation: Hotel -> TravelCompanyProfile (travelCompanyId) so travel-company users can own/manage hotels.
+  - Updated Room to include hotelId and a composite unique constraint (hotelId + number) so the same room numbers can exist across different hotels.
+  - Updated Reservation to include optional hotelId to know which hotel the reservation belongs to.
+  - Kept new foreign keys optional to ease migration (you can tighten constraints later once data is migrated).
+*/
 
 model User {
   id                   Int                   @id @default(autoincrement())
@@ -41,6 +56,9 @@ model TravelCompanyProfile {
   user          User           @relation(fields: [userId], references: [id])
   userId        Int            @unique
   blockBookings BlockBooking[]
+
+  // NEW: travel companies can own/manage hotels
+  hotels        Hotel[]        // one-to-many
 }
 
 model BlockBooking {
@@ -57,17 +75,53 @@ model BlockBooking {
   createdAt       DateTime             @default(now())
 }
 
+/*
+  Hotel model: central entity for properties in the chain.
+  - images and amenities use Postgres array (String[]).
+  - travelCompanyId optional to support both chain-owned and independent hotels.
+*/
+model Hotel {
+  id              Int         @id @default(autoincrement())
+  name            String
+  slug            String      @unique
+  description     String?
+  address         String?
+  city            String?
+  country         String?
+  latitude        Float?
+  longitude       Float?
+  starRating      Float?      // e.g. 4.5
+  amenities       String[]    @default([]) // ["wifi","pool","gym"]
+  images          String[]    @default([]) // URLs to images
+  travelCompany   TravelCompanyProfile? @relation(fields: [travelCompanyId], references: [id])
+  travelCompanyId Int?
+  rooms           Room[]
+  reservations    Reservation[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
 model Room {
   id            Int           @id @default(autoincrement())
-  number        String        @unique
+  // room number (not globally unique; unique per-hotel via @@unique)
+  number        String
   type          String
   status        String // "available" | "occupied" | "maintenance"
   pricePerNight Float         @default(120.0)
+
+  // NEW: relation to Hotel
+  hotel         Hotel?        @relation(fields: [hotelId], references: [id])
+  hotelId       Int?
+
   reservations  Reservation[] @relation("RoomReservations")
+  createdAt     DateTime      @default(now())
+
+  @@unique([hotelId, number])
 }
 
 model Reservation {
   id         Int              @id @default(autoincrement())
+
   // Optional, used for customer dashboard only
   customer   CustomerProfile? @relation(fields: [customerId], references: [id])
   customerId Int?
@@ -82,6 +136,10 @@ model Reservation {
   room       Room?   @relation("RoomReservations", fields: [roomId], references: [id])
   roomType   String
   roomNumber String? // For display/search only, not a relation
+
+  // NEW: link reservation to hotel (helps reports, pages)
+  hotel       Hotel? @relation(fields: [hotelId], references: [id])
+  hotelId     Int?
 
   arrivalDate     DateTime
   departureDate   DateTime?

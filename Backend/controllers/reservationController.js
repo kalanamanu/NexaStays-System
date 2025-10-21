@@ -1,12 +1,24 @@
-const express = require("express");
-const router = express.Router();
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const { authenticateToken, authenticateClerkToken } = require("../middleware/authenticateToken");
 
-// Create hotel room reservation
-router.post("/", authenticateToken, async (req, res) => {
+/**
+ * Reservation controller
+ * Exports:
+ * - createReservation
+ * - createResidentialReservation
+ * - getReservations
+ * - updateReservation
+ * - deleteReservation
+ * - getAllReservations (clerk)
+ * - createClerkReservation
+ * - checkinReservation
+ * - checkoutReservation
+ *
+ * Routes should apply authenticateToken / authenticateClerkToken as appropriate.
+ */
+
+async function createReservation(req, res) {
     const {
         roomType,
         arrivalDate,
@@ -16,9 +28,9 @@ router.post("/", authenticateToken, async (req, res) => {
         skipCreditCard,
         fullName,
         email,
-        phone
+        phone,
     } = req.body;
-    const customerId = req.user.customerProfileId;
+    const customerId = req.user && req.user.customerProfileId;
 
     if (!customerId) {
         return res.status(400).json({ error: "Customer profile not found. Please log in again." });
@@ -56,26 +68,26 @@ router.post("/", authenticateToken, async (req, res) => {
 
         res.json({ reservation, clientSecret });
     } catch (err) {
+        console.error("createReservation error:", err);
         res.status(500).json({ error: err.message });
     }
-});
+}
 
-// POST: Create residential suite reservation (weekly/monthly)
-router.post("/residential", authenticateToken, async (req, res) => {
+async function createResidentialReservation(req, res) {
     const {
-        roomType, // should be "residential"
+        roomType, // expected "residential"
         durationType, // "week" or "month"
         durationCount,
         arrivalDate,
-        departureDate, // can be calculated on frontend and sent in request
+        departureDate,
         guests,
         totalAmount,
         skipCreditCard,
         fullName,
         email,
-        phone
+        phone,
     } = req.body;
-    const customerId = req.user.customerProfileId;
+    const customerId = req.user && req.user.customerProfileId;
 
     if (!customerId) {
         return res.status(400).json({ error: "Customer profile not found. Please log in again." });
@@ -115,13 +127,13 @@ router.post("/residential", authenticateToken, async (req, res) => {
 
         res.json({ reservation, clientSecret });
     } catch (err) {
+        console.error("createResidentialReservation error:", err);
         res.status(500).json({ error: err.message });
     }
-});
+}
 
-// GET: All Reservations for Customer
-router.get("/", authenticateToken, async (req, res) => {
-    const customerId = req.user.customerProfileId;
+async function getReservations(req, res) {
+    const customerId = req.user && req.user.customerProfileId;
 
     if (!customerId) {
         return res.status(400).json({ error: "Customer profile not found. Please log in again." });
@@ -134,14 +146,14 @@ router.get("/", authenticateToken, async (req, res) => {
         });
         res.json({ reservations });
     } catch (err) {
+        console.error("getReservations error:", err);
         res.status(500).json({ error: "Failed to fetch reservations." });
     }
-});
+}
 
-// PUT: Edit Reservation by ID
-router.put("/:id", authenticateToken, async (req, res) => {
+async function updateReservation(req, res) {
     const reservationId = Number(req.params.id);
-    const customerId = req.user.customerProfileId;
+    const customerId = req.user && req.user.customerProfileId;
     const {
         roomType,
         arrivalDate,
@@ -157,7 +169,6 @@ router.put("/:id", authenticateToken, async (req, res) => {
     }
 
     try {
-        // Ensure the reservation belongs to the logged-in customer
         const reservation = await prisma.reservation.findUnique({
             where: { id: reservationId },
         });
@@ -176,27 +187,25 @@ router.put("/:id", authenticateToken, async (req, res) => {
                 totalAmount,
                 durationType,
                 durationCount,
-            }
+            },
         });
 
         res.json({ reservation: updatedReservation });
     } catch (err) {
-        console.error("Reservation update error:", err);
+        console.error("updateReservation error:", err);
         res.status(500).json({ error: "Failed to update reservation.", details: err.message });
     }
-});
+}
 
-// DELETE: Delete Reservation by ID
-router.delete("/:id", authenticateToken, async (req, res) => {
+async function deleteReservation(req, res) {
     const reservationId = Number(req.params.id);
-    const customerId = req.user.customerProfileId;
+    const customerId = req.user && req.user.customerProfileId;
 
     if (!customerId) {
         return res.status(400).json({ error: "Customer profile not found. Please log in again." });
     }
 
     try {
-        // Ensure the reservation exists and belongs to the logged-in customer
         const reservation = await prisma.reservation.findUnique({
             where: { id: reservationId },
         });
@@ -211,34 +220,29 @@ router.delete("/:id", authenticateToken, async (req, res) => {
 
         res.json({ message: "Reservation deleted successfully." });
     } catch (err) {
-        console.error("Reservation delete error:", err);
+        console.error("deleteReservation error:", err);
         res.status(500).json({ error: "Failed to delete reservation.", details: err.message });
     }
-});
+}
 
-// GET: All Reservations (for clerk)
-
-router.get("/all", authenticateClerkToken, async (req, res) => {
+async function getAllReservations(req, res) {
     try {
         const reservations = await prisma.reservation.findMany({
             include: {
-                customer: true, // This gives you firstName, lastName, phone, etc.
-                room: true      // Optional, for room info
+                customer: true,
+                room: true,
             },
-            orderBy: { createdAt: "desc" }
+            orderBy: { createdAt: "desc" },
         });
 
         res.json({ reservations });
     } catch (err) {
-        console.error(err);
+        console.error("getAllReservations error:", err);
         res.status(500).json({ error: "Failed to fetch all reservations." });
     }
-});
+}
 
-
-// Clerk creates a reservation for a guest (walk-in)
-// POST: Clerk creates (walk-in or phone) reservation for a guest
-router.post("/clerk", authenticateClerkToken, async (req, res) => {
+async function createClerkReservation(req, res) {
     const {
         guestName,
         guestPhone,
@@ -249,7 +253,7 @@ router.post("/clerk", authenticateClerkToken, async (req, res) => {
         departureDate,
         guests,
         totalAmount,
-        status
+        status,
     } = req.body;
 
     if (
@@ -278,27 +282,25 @@ router.post("/clerk", authenticateClerkToken, async (req, res) => {
                 departureDate: new Date(departureDate),
                 guests,
                 totalAmount,
-                status
+                status,
             },
         });
 
-        // Update room status if walk-in/checked-in
         if (status === "checked-in" && roomNumber) {
             await prisma.room.update({
                 where: { number: roomNumber },
-                data: { status: "occupied" }
+                data: { status: "occupied" },
             });
         }
 
         res.json({ reservation });
     } catch (err) {
+        console.error("createClerkReservation error:", err);
         res.status(500).json({ error: err.message });
     }
-});
+}
 
-
-// PATCH /api/reservations/checkin
-router.patch("/checkin", authenticateClerkToken, async (req, res) => {
+async function checkinReservation(req, res) {
     const { reservationId, roomNumber } = req.body;
     if (!reservationId || !roomNumber) {
         return res.status(400).json({ error: "Missing fields." });
@@ -306,38 +308,37 @@ router.patch("/checkin", authenticateClerkToken, async (req, res) => {
     try {
         const reservation = await prisma.reservation.update({
             where: { id: reservationId },
-            data: { status: "checked-in", roomNumber }
+            data: { status: "checked-in", roomNumber },
         });
         await prisma.room.update({
             where: { number: roomNumber },
-            data: { status: "occupied" }
+            data: { status: "occupied" },
         });
         res.json({ reservation });
     } catch (err) {
+        console.error("checkinReservation error:", err);
         res.status(500).json({ error: err.message });
     }
-});
+}
 
-//Check-out API
-router.post("/checkout", authenticateClerkToken, async (req, res) => {
+async function checkoutReservation(req, res) {
     const { reservationId, paymentMethod, bill } = req.body;
     if (!reservationId || !bill) {
         return res.status(400).json({ error: "Missing required fields." });
     }
     try {
-        // Update reservation status
         const reservation = await prisma.reservation.update({
             where: { id: reservationId },
-            data: { status: "checked-out", updatedAt: new Date().toISOString() }
+            data: { status: "checked-out", updatedAt: new Date() },
         });
-        // Make room available
+
         if (reservation.roomNumber) {
             await prisma.room.update({
                 where: { number: reservation.roomNumber },
-                data: { status: "available" }
+                data: { status: "available" },
             });
         }
-        // Create billing record
+
         const billingRecord = await prisma.billingRecord.create({
             data: {
                 reservationId: reservation.id,
@@ -352,9 +353,22 @@ router.post("/checkout", authenticateClerkToken, async (req, res) => {
                 total: bill.total,
             },
         });
+
         res.json({ reservation, billingRecord });
     } catch (err) {
+        console.error("checkoutReservation error:", err);
         res.status(500).json({ error: err.message });
     }
-});
-module.exports = router;
+}
+
+module.exports = {
+    createReservation,
+    createResidentialReservation,
+    getReservations,
+    updateReservation,
+    deleteReservation,
+    getAllReservations,
+    createClerkReservation,
+    checkinReservation,
+    checkoutReservation,
+};
