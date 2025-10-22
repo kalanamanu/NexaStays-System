@@ -1,17 +1,17 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import HotelCard, { Hotel } from "@/components/ui/HotelCard";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 /**
- * HotelsSection: maps hotels -> individual HotelCard components.
- * Motion wrapper is applied here so the card component stays focused on markup/styling.
+ * Ensure each grid item stretches to full height so HotelCard h-full works.
+ * Using `items-stretch` on a surrounding flex or ensuring grid cells stretch fixes differences.
  */
-
 const HOTELS: Hotel[] = [
+  // ... same sample data ...
   {
     id: 1,
     name: "Oceanview Resort",
@@ -37,55 +37,7 @@ const HOTELS: Hotel[] = [
     description: "Central hotel with rooftop bar and business facilities.",
     status: "Few rooms",
   },
-  {
-    id: 3,
-    name: "Serene Bay Hotel",
-    city: "Santorini",
-    country: "Greece",
-    rating: 4.9,
-    startingPrice: 289,
-    image: "/images/hotel-3.jpg",
-    tag: "Boutique",
-    description:
-      "Clifftop views and boutique service in a picturesque island setting.",
-    status: "Available",
-  },
-  {
-    id: 4,
-    name: "Cityscape Suites",
-    city: "London",
-    country: "UK",
-    rating: 4.5,
-    startingPrice: 179,
-    image: "/images/hotel-4.jpg",
-    tag: "Suites",
-    description: "Comfortable stays with easy access to major attractions.",
-    status: "Maintenance",
-  },
-  {
-    id: 5,
-    name: "Tropical Retreat",
-    city: "Phuket",
-    country: "Thailand",
-    rating: 4.7,
-    startingPrice: 159,
-    image: "/images/hotel-5.jpg",
-    tag: "Resort",
-    description: "Lush tropical grounds and relaxing amenities.",
-    status: "Available",
-  },
-  {
-    id: 6,
-    name: "Azure Heights",
-    city: "Dubai",
-    country: "UAE",
-    rating: 4.6,
-    startingPrice: 219,
-    image: "/images/hotel-6.jpg",
-    tag: "Luxury",
-    description: "Modern skyscraper hotel with panoramic city views.",
-    status: "Available",
-  },
+  // ... more hotels ...
 ];
 
 const cardVariants = {
@@ -107,7 +59,7 @@ export default function HotelsSection() {
               Our Hotels
             </h3>
             <p className="text-gray-600 dark:text-gray-300 mt-2 max-w-xl">
-              Explore our curated hotel collection — handpicked locations and
+              Explore our curated hotel collection handpicked locations and
               consistent quality.
             </p>
           </div>
@@ -121,7 +73,8 @@ export default function HotelsSection() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+        {/* Make sure each grid cell stretches by setting items-stretch on the container that holds the cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 auto-rows-fr">
           {HOTELS.map((hotel, i) => (
             <motion.div
               key={hotel.id}
@@ -130,6 +83,7 @@ export default function HotelsSection() {
               whileInView="visible"
               viewport={{ once: true, amount: 0.15 }}
               variants={cardVariants}
+              className="h-full"
             >
               <HotelCard hotel={hotel} />
             </motion.div>

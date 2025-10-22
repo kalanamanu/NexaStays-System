@@ -2,22 +2,42 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 /**
- * Update customer profile controller
- * - Ensures the profile exists
- * - Ensures the authenticated user owns the profile
- * - Updates allowed fields
+ * Get customer profile by ID or by current user (me)
  */
+async function getCustomerProfile(req, res) {
+    try {
+        let profile;
+        // If the "me" route is hit, req.params.id will be undefined
+        if (!req.params.id) {
+            const authenticatedUserId = req.user && (req.user.userId || req.user.id);
+            if (!authenticatedUserId) {
+                return res.status(401).json({ message: "Authentication required" });
+            }
+            profile = await prisma.customerProfile.findUnique({
+                where: { userId: authenticatedUserId },
+            });
+        } else {
+            const profileId = parseInt(req.params.id, 10);
+            if (Number.isNaN(profileId)) {
+                return res.status(400).json({ message: "Invalid profile id" });
+            }
+            profile = await prisma.customerProfile.findUnique({
+                where: { id: profileId },
+            });
+        }
+        if (!profile) {
+            return res.status(404).json({ message: "Customer profile not found" });
+        }
+        res.json({ success: true, data: profile });
+    } catch (error) {
+        console.error("getCustomerProfile error:", error);
+        res.status(500).json({ message: "Could not fetch profile", error: error.message });
+    }
+}
+
 async function updateCustomerProfile(req, res) {
     const { id } = req.params;
-    const {
-        firstName,
-        lastName,
-        phone,
-        country,
-        nic,
-        birthDay,
-        address,
-    } = req.body;
+    const { firstName, lastName, phone, country, nic, birthDay, address } = req.body;
 
     try {
         const profileId = parseInt(id, 10);
@@ -25,7 +45,6 @@ async function updateCustomerProfile(req, res) {
             return res.status(400).json({ message: "Invalid profile id" });
         }
 
-        // Fetch profile
         const profile = await prisma.customerProfile.findUnique({
             where: { id: profileId },
         });
@@ -34,13 +53,11 @@ async function updateCustomerProfile(req, res) {
             return res.status(404).json({ message: "Customer profile not found" });
         }
 
-        // Accept either req.user.userId or req.user.id depending on your auth payload
         const authenticatedUserId = req.user && (req.user.userId || req.user.id);
         if (!authenticatedUserId) {
             return res.status(401).json({ message: "Authentication required" });
         }
 
-        // Ensure the profile belongs to the logged in user
         if (profile.userId !== authenticatedUserId) {
             return res.status(403).json({ message: "Unauthorized" });
         }
@@ -48,7 +65,6 @@ async function updateCustomerProfile(req, res) {
         const updatedProfile = await prisma.customerProfile.update({
             where: { id: profileId },
             data: {
-                // Only update fields that exist in the request body (allow partial updates)
                 ...(firstName !== undefined && { firstName }),
                 ...(lastName !== undefined && { lastName }),
                 ...(phone !== undefined && { phone }),
@@ -66,6 +82,44 @@ async function updateCustomerProfile(req, res) {
     }
 }
 
+async function deleteCustomerProfile(req, res) {
+    const { id } = req.params;
+    try {
+        const profileId = parseInt(id, 10);
+        if (Number.isNaN(profileId)) {
+            return res.status(400).json({ message: "Invalid profile id" });
+        }
+
+        const profile = await prisma.customerProfile.findUnique({
+            where: { id: profileId },
+        });
+
+        if (!profile) {
+            return res.status(404).json({ message: "Customer profile not found" });
+        }
+
+        const authenticatedUserId = req.user && (req.user.userId || req.user.id);
+        if (!authenticatedUserId) {
+            return res.status(401).json({ message: "Authentication required" });
+        }
+
+        if (profile.userId !== authenticatedUserId) {
+            return res.status(403).json({ message: "Unauthorized" });
+        }
+
+        await prisma.customerProfile.delete({
+            where: { id: profileId },
+        });
+
+        res.json({ message: "Profile deleted" });
+    } catch (error) {
+        console.error("deleteCustomerProfile error:", error);
+        res.status(500).json({ message: "Could not delete profile", error: error.message });
+    }
+}
+
 module.exports = {
+    getCustomerProfile,
     updateCustomerProfile,
+    deleteCustomerProfile,
 };

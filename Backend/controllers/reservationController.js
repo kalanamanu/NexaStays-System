@@ -20,6 +20,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 async function createReservation(req, res) {
     const {
+        hotelId,
         roomType,
         arrivalDate,
         departureDate,
@@ -29,11 +30,24 @@ async function createReservation(req, res) {
         fullName,
         email,
         phone,
+        // You can add additional fields if you start supporting roomSelections (see note below)
     } = req.body;
     const customerId = req.user && req.user.customerProfileId;
 
     if (!customerId) {
         return res.status(400).json({ error: "Customer profile not found. Please log in again." });
+    }
+    if (!hotelId) {
+        return res.status(400).json({ error: "Hotel ID is required." });
+    }
+    if (!roomType) {
+        return res.status(400).json({ error: "Room type is required." });
+    }
+
+    // Optional: validate hotel exists
+    const hotel = await prisma.hotel.findUnique({ where: { id: Number(hotelId) } });
+    if (!hotel) {
+        return res.status(404).json({ error: "Hotel not found." });
     }
 
     try {
@@ -56,6 +70,7 @@ async function createReservation(req, res) {
         const reservation = await prisma.reservation.create({
             data: {
                 customerId,
+                hotelId: Number(hotelId),
                 roomType,
                 arrivalDate: new Date(arrivalDate),
                 departureDate: new Date(departureDate),
@@ -63,6 +78,9 @@ async function createReservation(req, res) {
                 totalAmount,
                 status,
                 paymentIntentId,
+                guestName: fullName,
+                guestEmail: email,
+                guestPhone: phone,
             },
         });
 
@@ -75,6 +93,7 @@ async function createReservation(req, res) {
 
 async function createResidentialReservation(req, res) {
     const {
+        hotelId,
         roomType, // expected "residential"
         durationType, // "week" or "month"
         durationCount,
@@ -92,6 +111,15 @@ async function createResidentialReservation(req, res) {
     if (!customerId) {
         return res.status(400).json({ error: "Customer profile not found. Please log in again." });
     }
+    if (!hotelId) {
+        return res.status(400).json({ error: "Hotel ID is required." });
+    }
+
+    // Optional: validate hotel exists
+    const hotel = await prisma.hotel.findUnique({ where: { id: Number(hotelId) } });
+    if (!hotel) {
+        return res.status(404).json({ error: "Hotel not found." });
+    }
 
     try {
         let paymentIntent = null;
@@ -113,6 +141,7 @@ async function createResidentialReservation(req, res) {
         const reservation = await prisma.reservation.create({
             data: {
                 customerId,
+                hotelId: Number(hotelId),
                 roomType: "residential",
                 arrivalDate: new Date(arrivalDate),
                 departureDate: departureDate ? new Date(departureDate) : null,
@@ -122,6 +151,9 @@ async function createResidentialReservation(req, res) {
                 paymentIntentId,
                 durationType,
                 durationCount,
+                guestName: fullName,
+                guestEmail: email,
+                guestPhone: phone,
             },
         });
 
@@ -143,6 +175,10 @@ async function getReservations(req, res) {
         const reservations = await prisma.reservation.findMany({
             where: { customerId },
             orderBy: { createdAt: "desc" },
+            include: {
+                hotel: true,
+                room: true,
+            },
         });
         res.json({ reservations });
     } catch (err) {
@@ -155,6 +191,7 @@ async function updateReservation(req, res) {
     const reservationId = Number(req.params.id);
     const customerId = req.user && req.user.customerProfileId;
     const {
+        hotelId,
         roomType,
         arrivalDate,
         departureDate,
@@ -177,9 +214,20 @@ async function updateReservation(req, res) {
             return res.status(403).json({ error: "Unauthorized or reservation not found." });
         }
 
+        // Optional: If hotelId is allowed to be updated, validate it
+        let hotelUpdate = {};
+        if (hotelId) {
+            const hotel = await prisma.hotel.findUnique({ where: { id: Number(hotelId) } });
+            if (!hotel) {
+                return res.status(404).json({ error: "Hotel not found." });
+            }
+            hotelUpdate = { hotelId: Number(hotelId) };
+        }
+
         const updatedReservation = await prisma.reservation.update({
             where: { id: reservationId },
             data: {
+                ...hotelUpdate,
                 roomType,
                 arrivalDate: new Date(arrivalDate),
                 departureDate: departureDate ? new Date(departureDate) : null,
@@ -231,6 +279,7 @@ async function getAllReservations(req, res) {
             include: {
                 customer: true,
                 room: true,
+                hotel: true,
             },
             orderBy: { createdAt: "desc" },
         });
@@ -244,6 +293,7 @@ async function getAllReservations(req, res) {
 
 async function createClerkReservation(req, res) {
     const {
+        hotelId,
         guestName,
         guestPhone,
         guestEmail,
@@ -257,6 +307,7 @@ async function createClerkReservation(req, res) {
     } = req.body;
 
     if (
+        !hotelId ||
         !guestName ||
         !guestPhone ||
         !roomType ||
@@ -270,9 +321,16 @@ async function createClerkReservation(req, res) {
         return res.status(400).json({ error: "All required fields must be filled." });
     }
 
+    // Optional: validate hotel exists
+    const hotel = await prisma.hotel.findUnique({ where: { id: Number(hotelId) } });
+    if (!hotel) {
+        return res.status(404).json({ error: "Hotel not found." });
+    }
+
     try {
         const reservation = await prisma.reservation.create({
             data: {
+                hotelId: Number(hotelId),
                 guestName,
                 guestPhone,
                 guestEmail,

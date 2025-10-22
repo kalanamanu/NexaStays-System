@@ -49,6 +49,11 @@ interface Reservation {
   status: "pending" | "confirmed" | "cancelled" | "pending_payment" | string;
   guests: number;
   totalAmount: number;
+  hotel?: {
+    id: number;
+    name: string;
+  };
+  roomQuantity?: number;
 }
 
 const ROOM_TYPES = [
@@ -620,10 +625,11 @@ export default function CustomerDashboard() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Reservation ID</TableHead>
+                      <TableHead>Hotel</TableHead>
                       <TableHead>Room Type</TableHead>
                       <TableHead>Check-in</TableHead>
                       <TableHead>Check-out</TableHead>
-                      <TableHead>Guests</TableHead>
+                      <TableHead>Rooms</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead>Actions</TableHead>
@@ -642,6 +648,11 @@ export default function CustomerDashboard() {
                           <TableCell className="font-medium">
                             {reservation.id}
                           </TableCell>
+                          <TableCell>
+                            {reservation.hotel?.name || (
+                              <span className="text-gray-400">N/A</span>
+                            )}
+                          </TableCell>
                           <TableCell>{reservation.roomType}</TableCell>
                           <TableCell>
                             {new Date(
@@ -653,7 +664,7 @@ export default function CustomerDashboard() {
                               reservation.departureDate
                             ).toLocaleDateString()}
                           </TableCell>
-                          <TableCell>{reservation.guests}</TableCell>
+                          <TableCell>{reservation.roomQuantity ?? 1}</TableCell>
                           <TableCell>
                             <Badge
                               className={getStatusColor(reservation.status)}

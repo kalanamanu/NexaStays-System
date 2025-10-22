@@ -22,7 +22,7 @@ export default function HotelCard({ hotel }: { hotel: Hotel }) {
   return (
     <article
       aria-labelledby={`hotel-${hotel.id}-title`}
-      className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-md hover:shadow-2xl transition-shadow duration-300"
+      className="h-full flex flex-col bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-md hover:shadow-2xl transition-shadow duration-300"
     >
       {/* Image / Badge */}
       <div className="relative">
@@ -37,72 +37,67 @@ export default function HotelCard({ hotel }: { hotel: Hotel }) {
             {hotel.tag}
           </div>
         )}
-
-        {/* Rating pill */}
-        <div className="absolute top-3 right-3 flex items-center gap-2 bg-black/60 text-white rounded-full px-3 py-1 text-sm">
-          <Star className="h-4 w-4 text-amber-400" />
-          <span className="font-medium">{hotel.rating.toFixed(1)}</span>
-        </div>
       </div>
 
-      {/* Body */}
-      <div className="p-5 flex flex-col gap-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <h4
-              id={`hotel-${hotel.id}-title`}
-              className="text-lg font-bold text-gray-900 dark:text-white"
-            >
-              {hotel.name}
-            </h4>
-            <div className="mt-1 text-sm text-gray-500 dark:text-gray-300 flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-gray-400" />
-              <span>
-                {hotel.city}, {hotel.country}
-              </span>
+      {/* Body: use flex-1 so cards line up */}
+      <div className="p-5 flex-1 flex flex-col justify-between">
+        <div>
+          <div className="flex items-start justify-between">
+            <div className="pr-4">
+              <h4
+                id={`hotel-${hotel.id}-title`}
+                className="text-lg font-bold text-gray-900 dark:text-white"
+              >
+                {hotel.name}
+              </h4>
+              <div className="mt-1 text-sm text-gray-500 dark:text-gray-300 flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-gray-400" />
+                <span>
+                  {hotel.city}, {hotel.country}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-right flex-shrink-0 ml-4">
+              <div className="text-sm text-gray-500 dark:text-gray-300">
+                From
+              </div>
+              <div className="text-2xl font-extrabold text-gray-900 dark:text-white">
+                ${hotel.startingPrice ?? "N/A"}
+              </div>
+              {hotel.status && (
+                <div className="mt-2">
+                  <span
+                    className={`inline-block text-xs font-medium px-2 py-1 rounded-full ${
+                      hotel.status === "Available"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : hotel.status === "Few rooms"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-rose-100 text-rose-800"
+                    }`}
+                  >
+                    {hotel.status}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="text-right">
-            <div className="text-sm text-gray-500 dark:text-gray-300">From</div>
-            <div className="text-2xl font-extrabold text-gray-900 dark:text-white">
-              ${hotel.startingPrice}
-            </div>
-            <div className="mt-2">
-              <span
-                className={`inline-block text-xs font-medium px-2 py-1 rounded-full ${
-                  hotel.status === "Available"
-                    ? "bg-emerald-100 text-emerald-800"
-                    : hotel.status === "Few rooms"
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-rose-100 text-rose-800"
-                }`}
-              >
-                {hotel.status}
-              </span>
-            </div>
-          </div>
+          {/* Description: clamp to 3 lines for consistent layout (preferred) */}
+          <p className="mt-4 text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
+            {hotel.description && hotel.description.trim().length > 0
+              ? hotel.description
+              : "No description available."}
+          </p>
         </div>
 
-        <p className="text-sm text-gray-600 dark:text-gray-300">
-          {hotel.description}
-        </p>
-
-        <div className="flex items-center justify-between mt-1">
-          <div className="flex items-center gap-3">
-            {/* Placeholder actions/icons can be swapped for real handlers */}
-            <Link href={`/hotels/${hotel.id}`}>
-              <Button variant="outline" className="px-3 py-2">
-                View
-              </Button>
-            </Link>
-
-            <Link href={`/reservation?hotelId=${hotel.id}`}>
-              <Button className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
-                Book
-              </Button>
-            </Link>
-          </div>
+        {/* Actions always sit at the bottom due to justify-between */}
+        <div className="mt-4 flex items-center gap-3">
+          <Link href={`/hotels/${hotel.id}`}>
+            <Button variant="outline" className="px-3 py-2">
+              View
+            </Button>
+          </Link>
         </div>
       </div>
     </article>

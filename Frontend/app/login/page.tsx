@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Hotel, Loader2, Sparkles, Eye, EyeOff } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 import { useUser } from "@/context/user-context";
 import NavBar from "@/components/nav-bar";
 import { motion, AnimatePresence } from "framer-motion";
@@ -40,15 +40,52 @@ export default function LoginPage() {
   const { login } = useUser();
   const router = useRouter();
 
+  // --- Helper to store user details in localStorage ---
+  function saveUserDetailsToLocalStorage(user: any) {
+    if (!user) return;
+    localStorage.setItem("fullName", user.fullName || "");
+    localStorage.setItem("email", user.email || "");
+    localStorage.setItem("phone", user.phone || "");
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
     try {
-      const success = await login(email, password, role);
-      if (success) {
-        // Redirect based on role
+      // Assume login returns a user object or an object containing user and token
+      const result = await login(email, password, role);
+
+      // Type guard to check if result is an object with a user property
+      const hasUser = (val: any): val is { user: any; token?: string } =>
+        typeof val === "object" && val !== null && "user" in val;
+
+      if (hasUser(result)) {
+        saveUserDetailsToLocalStorage(result.user);
+        if (result.token) localStorage.setItem("token", result.token);
+
+        switch (role) {
+          case "customer":
+            router.push("/dashboard/customer");
+            break;
+          case "clerk":
+            router.push("/dashboard/clerk");
+            break;
+          case "manager":
+            router.push("/dashboard/manager");
+            break;
+          case "travel-company":
+            router.push("/travel-portal");
+            break;
+          default:
+            router.push("/");
+        }
+      } else if (result === true) {
+        // Fallback: If login() returns only true/false, fetch user info as needed here
+        // Example:
+        // const userProfile = await fetchUserProfile();
+        // saveUserDetailsToLocalStorage(userProfile);
         switch (role) {
           case "customer":
             router.push("/dashboard/customer");
@@ -316,15 +353,6 @@ export default function LoginPage() {
                     </Link>
                   </motion.div>
                 </div>
-
-                {/* <div className="text-center text-sm text-gray-500 dark:text-gray-400 bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg border border-purple-200 dark:border-purple-800">
-                  <div className="font-medium text-purple-700 dark:text-purple-300 mb-2">
-                    Demo Access Available
-                  </div>
-                  <div>
-                    Use any email/password combination to explore the system
-                  </div>
-                </div> */}
               </motion.div>
             </CardContent>
           </Card>
