@@ -78,7 +78,7 @@ function getUserDetailsFromLocalStorage() {
     const user = JSON.parse(raw);
     const firstName = (user.customerProfile?.firstName || "").trim();
     const lastName = (user.customerProfile?.lastName || "").trim();
-    const fullName = [firstName, lastName].filter(Boolean).join(" "); // Only join if present
+    const fullName = [firstName, lastName].filter(Boolean).join(" ");
     return {
       fullName: fullName,
       email: user.email || "",
@@ -92,8 +92,6 @@ function getUserDetailsFromLocalStorage() {
 export default function ReservationPage() {
   const searchParams = useSearchParams();
   const hotelIdParam = searchParams.get("hotelId") || "";
-  const roomTypeParam = (searchParams.get("roomType") || "").toLowerCase();
-  const roomsParam = searchParams.get("rooms") || "";
   const occupantsParam = (searchParams.get("occupants") || "1").toString();
 
   // Fetch all hotels for dropdown
@@ -124,7 +122,6 @@ export default function ReservationPage() {
     fullName: userDetails.fullName || "",
     email: userDetails.email || "",
     phone: userDetails.phone || "",
-    roomType: "",
     occupants: occupantsParam,
     arrivalDate: undefined as Date | undefined,
     departureDate: undefined as Date | undefined,
@@ -143,10 +140,9 @@ export default function ReservationPage() {
     skipCreditCard: false,
   });
 
-  // State for room selections (number of rooms per type)
-  const [roomSelections, setRoomSelections] = useState<{
-    [type: string]: number;
-  }>({});
+  // Single room selection states
+  const [selectedRoomType, setSelectedRoomType] = useState<string>("");
+  const [selectedRoomId, setSelectedRoomId] = useState<string>("");
 
   // Track if autofill from params has happened, so it only happens once per hotel selection
   const [didAutoFill, setDidAutoFill] = useState(false);
@@ -159,19 +155,17 @@ export default function ReservationPage() {
       hotelIdParam && hotelIdStrings.includes(hotelIdParam)
         ? hotelIdParam
         : hotelIdStrings[0];
-
-    const details = getUserDetailsFromLocalStorage(); // <-- NEW
-
+    const details = getUserDetailsFromLocalStorage();
     setSelectedHotelId(initialHotelId);
     setFormData((prev) => ({
       ...prev,
       hotelId: initialHotelId,
-      ...details, // <-- NEW
+      ...details,
     }));
     setResidentialForm((prev) => ({
       ...prev,
       hotelId: initialHotelId,
-      ...details, // <-- NEW
+      ...details,
     }));
     // eslint-disable-next-line
   }, [hotels, hotelIdParam]);
@@ -222,7 +216,12 @@ export default function ReservationPage() {
   // Detailed info for available room types for selected hotel
   const availableRoomTypeDetails = useMemo(() => {
     const typeMap: {
-      [type: string]: { type: string; price: number; available: number };
+      [type: string]: {
+        type: string;
+        price: number;
+        available: number;
+        rooms: any[];
+      };
     } = {};
     for (const r of availableRooms) {
       const type = (r.type || "").toLowerCase();
@@ -232,9 +231,11 @@ export default function ReservationPage() {
           type,
           price: r.pricePerNight ?? 0,
           available: 1,
+          rooms: [r],
         };
       } else {
         typeMap[type].available += 1;
+        typeMap[type].rooms.push(r);
         if (
           r.pricePerNight !== undefined &&
           r.pricePerNight < typeMap[type].price
@@ -246,55 +247,29 @@ export default function ReservationPage() {
     return Object.values(typeMap);
   }, [availableRooms]);
 
-  // Autofill roomSelections and occupants from params when hotel details arrive
+  // Autofill selectedRoomType and selectedRoomId on load
   useEffect(() => {
-    if (!selectedHotelDetails || didAutoFill) return;
-    // Autofill room selections from roomsParam
-    if (roomsParam && availableRoomTypeDetails.length > 0) {
-      const parsed: { [type: string]: number } = {};
-      roomsParam.split(",").forEach((entry) => {
-        const [type, count] = entry.split(":");
-        if (type && count && !isNaN(Number(count))) {
-          parsed[type.toLowerCase()] = Number(count);
-        }
-      });
-      const initialSelections: { [type: string]: number } = {};
-      for (const t of availableRoomTypeDetails) {
-        initialSelections[t.type] = parsed[t.type] ?? 0;
-      }
-      setRoomSelections(initialSelections);
-      // Optionally, set formData.roomType to first with count > 0
-      const firstSelected = Object.entries(initialSelections).find(
-        ([, count]) => count > 0
+    if (
+      availableRoomTypeDetails.length > 0 &&
+      (!selectedRoomType ||
+        !availableRoomTypeDetails.find((t) => t.type === selectedRoomType))
+    ) {
+      setSelectedRoomType(availableRoomTypeDetails[0].type);
+      const firstRoom = availableRoomTypeDetails[0].rooms?.[0];
+      setSelectedRoomId(firstRoom ? firstRoom.id.toString() : "");
+    } else if (selectedRoomType) {
+      const foundType = availableRoomTypeDetails.find(
+        (t) => t.type === selectedRoomType
       );
-      if (firstSelected) {
-        setFormData((prev) => ({
-          ...prev,
-          roomType: firstSelected[0],
-        }));
+      if (foundType && foundType.rooms?.length > 0) {
+        if (!foundType.rooms.find((r) => r.id.toString() === selectedRoomId)) {
+          setSelectedRoomId(foundType.rooms[0].id.toString());
+        }
+      } else {
+        setSelectedRoomId("");
       }
     }
-    // Autofill occupants
-    setFormData((prev) => ({
-      ...prev,
-      occupants: occupantsParam,
-    }));
-    setDidAutoFill(true);
-    // eslint-disable-next-line
-  }, [
-    selectedHotelDetails,
-    availableRoomTypeDetails,
-    roomsParam,
-    occupantsParam,
-    didAutoFill,
-  ]);
-
-  // If user changes hotel, clear roomSelections
-  useEffect(() => {
-    setRoomSelections({});
-    setDidAutoFill(false);
-    // eslint-disable-next-line
-  }, [selectedHotelId]);
+  }, [availableRoomTypeDetails, selectedRoomType, selectedRoomId]);
 
   useEffect(() => {
     function handleRefill() {
@@ -316,14 +291,6 @@ export default function ReservationPage() {
     handleRefill();
     return () => window.removeEventListener("focus", handleRefill);
   }, []);
-
-  // Handler for changing room selection
-  const handleRoomSelectionChange = (type: string, value: number) => {
-    setRoomSelections((prev) => ({
-      ...prev,
-      [type]: value,
-    }));
-  };
 
   // Handler for changing hotel selection (dropdown)
   const handleHotelDropdownChange = (value: string) => {
@@ -351,8 +318,7 @@ export default function ReservationPage() {
       setResidentialErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
-  // --- Validation & submission logic unchanged ---
-
+  // --- Validation & submission logic ---
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [residentialErrors, setResidentialErrors] = useState<
     Record<string, string>
@@ -366,12 +332,10 @@ export default function ReservationPage() {
   const { toast } = useToast();
 
   const nights = getNights(formData.arrivalDate, formData.departureDate);
-  const totalAmount = useMemo(() => {
-    return availableRoomTypeDetails.reduce((sum, t) => {
-      const count = roomSelections[t.type] || 0;
-      return sum + count * t.price * nights;
-    }, 0);
-  }, [availableRoomTypeDetails, roomSelections, nights]);
+  const selectedTypeInfo = availableRoomTypeDetails.find(
+    (t) => t.type === selectedRoomType
+  );
+  const totalAmount = selectedTypeInfo ? selectedTypeInfo.price * nights : 0;
 
   const resDepartureDate = getResidentialDeparture(
     residentialForm.arrivalDate,
@@ -391,7 +355,8 @@ export default function ReservationPage() {
     if (!formData.fullName.trim()) newErrors.fullName = "Full name is required";
     if (!formData.email.trim()) newErrors.email = "Email is required";
     if (!formData.phone.trim()) newErrors.phone = "Phone number is required";
-    if (!formData.roomType) newErrors.roomType = "Room type is required";
+    if (!selectedRoomType) newErrors.roomType = "Room type is required";
+    if (!selectedRoomId) newErrors.roomType = "Room number is required";
     if (!formData.arrivalDate)
       newErrors.arrivalDate = "Arrival date is required";
     if (!formData.departureDate)
@@ -425,16 +390,20 @@ export default function ReservationPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // --- UPDATED: Save details to localStorage after submit ---
+  // --- Save details to localStorage after submit ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    console.log("SUBMIT FIRED");
+    if (!validateForm()) {
+      return;
+    }
     setIsLoading(true);
 
     try {
       const reqBody = {
         hotelId: formData.hotelId,
-        roomType: formData.roomType,
+        roomType: selectedRoomType,
+        roomIds: [selectedRoomId], // only one room
         arrivalDate: formData.arrivalDate?.toISOString(),
         departureDate: formData.departureDate?.toISOString(),
         guests: Number(formData.occupants),
@@ -450,18 +419,30 @@ export default function ReservationPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(reqBody),
       });
 
+      // Defensive: check for network errors before .json()
+      if (!res.ok) {
+        let errMsg = "Failed to make reservation";
+        try {
+          const errData = await res.json();
+          errMsg = errData.error || errMsg;
+        } catch {}
+        throw new Error(errMsg);
+      }
+
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.error || "Failed to make reservation");
+      if (Array.isArray(data.reservations) && data.reservations.length > 0) {
+        setReservationId(data.reservations[0].id);
+      } else {
+        setReservationId(null);
+      }
 
-      setReservationId(data.reservation.id);
-
-      // --- NEW: save user details to localStorage ---
+      // Save user details to localStorage
       localStorage.setItem("fullName", formData.fullName);
       localStorage.setItem("email", formData.email);
       localStorage.setItem("phone", formData.phone);
@@ -472,23 +453,21 @@ export default function ReservationPage() {
           description: "Your reservation has been submitted.",
         });
         router.push("/dashboard/customer");
+      } else if (data.clientSecret) {
+        setClientSecret(data.clientSecret);
+        setShowPayment(true);
       } else {
-        if (data.clientSecret) {
-          setClientSecret(data.clientSecret);
-          setShowPayment(true);
-        } else {
-          toast({
-            title: "Error",
-            description:
-              "No clientSecret received from backend. Stripe payment cannot proceed.",
-            variant: "destructive",
-          });
-        }
+        toast({
+          title: "Error",
+          description:
+            "No clientSecret received from backend. Stripe payment cannot proceed.",
+          variant: "destructive",
+        });
       }
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to create reservation.",
+        description: error.message || "An unexpected error occurred.",
         variant: "destructive",
       });
     } finally {
@@ -496,7 +475,7 @@ export default function ReservationPage() {
     }
   };
 
-  // --- UPDATED: Save details to localStorage after submit ---
+  // --- Save details to localStorage after submit ---
   const handleResidentialSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateResidential()) return;
@@ -506,6 +485,7 @@ export default function ReservationPage() {
       const reqBody = {
         hotelId: residentialForm.hotelId,
         roomType: "residential",
+        roomIds: [selectedRoomId], // only one room for residential too
         durationType: residentialForm.durationType,
         durationCount: residentialForm.durationCount,
         arrivalDate: residentialForm.arrivalDate?.toISOString(),
@@ -535,9 +515,12 @@ export default function ReservationPage() {
 
       if (!res.ok) throw new Error(data.error || "Failed to make reservation");
 
-      setReservationId(data.reservation.id);
+      if (Array.isArray(data.reservations) && data.reservations.length > 0) {
+        setReservationId(data.reservations[0].id);
+      } else {
+        setReservationId(null);
+      }
 
-      // --- NEW: save user details to localStorage ---
       localStorage.setItem("fullName", residentialForm.fullName);
       localStorage.setItem("email", residentialForm.email);
       localStorage.setItem("phone", residentialForm.phone);
@@ -717,77 +700,100 @@ export default function ReservationPage() {
                       </div>
                       <div className="space-y-4">
                         <h3 className="text-lg font-semibold">Room Details</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="mb-4">
-                            <Label className="block mb-1">
-                              Select rooms (choose quantity per type)
-                            </Label>
-                            <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label>Room Type *</Label>
+                          <Select
+                            value={selectedRoomType}
+                            onValueChange={(type) => {
+                              setSelectedRoomType(type);
+                              // Reset roomId to first available for that type
+                              const foundType = availableRoomTypeDetails.find(
+                                (t) => t.type === type
+                              );
+                              if (
+                                foundType &&
+                                foundType.rooms &&
+                                foundType.rooms[0]
+                              ) {
+                                setSelectedRoomId(
+                                  foundType.rooms[0].id.toString()
+                                );
+                              } else {
+                                setSelectedRoomId("");
+                              }
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select room type" />
+                            </SelectTrigger>
+                            <SelectContent>
                               {availableRoomTypeDetails.map((t) => (
-                                <div
+                                <SelectItem
                                   key={t.type}
-                                  className="flex items-center justify-between gap-2"
+                                  value={t.type}
+                                  disabled={!t.rooms || t.rooms.length === 0}
                                 >
-                                  <span className="font-medium">
-                                    {t.type.charAt(0).toUpperCase() +
-                                      t.type.slice(1)}
-                                    <span className="ml-2 text-xs text-gray-500">
-                                      (${t.price}/night, {t.available}{" "}
-                                      available)
-                                    </span>
-                                  </span>
-                                  <select
-                                    aria-label={`Number of ${t.type} rooms`}
-                                    value={roomSelections[t.type] ?? 0}
-                                    onChange={(e) =>
-                                      handleRoomSelectionChange(
-                                        t.type,
-                                        Number(e.target.value)
-                                      )
-                                    }
-                                    className="rounded-md px-3 py-2 border border-gray-200"
-                                  >
-                                    {Array.from(
-                                      { length: t.available + 1 },
-                                      (_, i) => i
-                                    ).map((n) => (
-                                      <option key={n} value={n}>
-                                        {n}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
+                                  {t.type.charAt(0).toUpperCase() +
+                                    t.type.slice(1)}{" "}
+                                  (${t.price}/night, {t.rooms?.length ?? 0}{" "}
+                                  available)
+                                </SelectItem>
                               ))}
-                              {errors.roomSelections && (
-                                <p className="text-sm text-red-500">
-                                  {errors.roomSelections}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Occupants */}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {selectedRoomType && (
                           <div className="space-y-2">
-                            <Label htmlFor="occupants">
-                              Number of Occupants
-                            </Label>
+                            <Label>Room Number *</Label>
                             <Select
-                              value={formData.occupants}
-                              onValueChange={handleOccupantsChange}
+                              value={selectedRoomId}
+                              onValueChange={setSelectedRoomId}
                             >
                               <SelectTrigger>
-                                <SelectValue />
+                                <SelectValue placeholder="Select room number" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="1">1 Guest</SelectItem>
-                                <SelectItem value="2">2 Guests</SelectItem>
-                                <SelectItem value="3">3 Guests</SelectItem>
-                                <SelectItem value="4">4 Guests</SelectItem>
-                                <SelectItem value="5">5 Guests</SelectItem>
-                                <SelectItem value="6">6 Guests</SelectItem>
+                                {(
+                                  availableRoomTypeDetails.find(
+                                    (t) => t.type === selectedRoomType
+                                  )?.rooms ?? []
+                                ).map((room) => (
+                                  <SelectItem
+                                    key={room.id}
+                                    value={room.id.toString()}
+                                  >
+                                    Room {room.number}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </div>
+                        )}
+                        <div className="space-y-2">
+                          <Label>Number of Occupants *</Label>
+                          <Select
+                            value={formData.occupants?.toString() ?? ""}
+                            onValueChange={(value) =>
+                              updateFormData("occupants", value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select number of occupants" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="1">1 Guest</SelectItem>
+                              <SelectItem value="2">2 Guests</SelectItem>
+                              <SelectItem value="3">3 Guests</SelectItem>
+                              <SelectItem value="4">4 Guests</SelectItem>
+                              <SelectItem value="5">5 Guests</SelectItem>
+                              <SelectItem value="6">6 Guests</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {errors.occupants && (
+                            <p className="text-sm text-red-500">
+                              {errors.occupants}
+                            </p>
+                          )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
@@ -854,10 +860,9 @@ export default function ReservationPage() {
                                     updateFormData("departureDate", date)
                                   }
                                   disabled={(date) =>
-                                    date < new Date() ||
-                                    (formData.arrivalDate
-                                      ? date <= formData.arrivalDate
-                                      : false)
+                                    !formData.arrivalDate ||
+                                    (formData.arrivalDate &&
+                                      date < formData.arrivalDate)
                                   }
                                   initialFocus
                                 />
@@ -937,7 +942,9 @@ export default function ReservationPage() {
                       <Button
                         type="submit"
                         className="w-full bg-green-600 hover:bg-green-700"
-                        disabled={isLoading}
+                        disabled={
+                          isLoading || !selectedRoomType || !selectedRoomId
+                        }
                       >
                         {isLoading ? (
                           <>
@@ -1280,7 +1287,9 @@ export default function ReservationPage() {
                         <Button
                           type="submit"
                           className="w-full bg-green-600 hover:bg-green-700"
-                          disabled={isLoading}
+                          disabled={
+                            isLoading || !selectedRoomType || !selectedRoomId
+                          }
                         >
                           {isLoading ? (
                             <>

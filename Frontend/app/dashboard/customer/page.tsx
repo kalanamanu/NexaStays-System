@@ -629,7 +629,6 @@ export default function CustomerDashboard() {
                       <TableHead>Room Type</TableHead>
                       <TableHead>Check-in</TableHead>
                       <TableHead>Check-out</TableHead>
-                      <TableHead>Rooms</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead>Actions</TableHead>
@@ -664,7 +663,7 @@ export default function CustomerDashboard() {
                               reservation.departureDate
                             ).toLocaleDateString()}
                           </TableCell>
-                          <TableCell>{reservation.roomQuantity ?? 1}</TableCell>
+
                           <TableCell>
                             <Badge
                               className={getStatusColor(reservation.status)}

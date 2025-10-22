@@ -17,10 +17,8 @@ export default function HotelDetailsPage({
   const { hotel, isLoading, isError } = useHotel(hotelId);
   const router = useRouter();
 
-  // State: roomSelections is an object { [roomType]: count }
-  const [roomSelections, setRoomSelections] = useState<{
-    [type: string]: number;
-  }>({});
+  // Only allow selection of one room type and one room
+  const [selectedRoomType, setSelectedRoomType] = useState<string>("");
   const [occupants, setOccupants] = useState<number>(1);
 
   // derive unique room types with price and availability (normalize status)
@@ -48,78 +46,44 @@ export default function HotelDetailsPage({
     return Array.from(map.entries()).map(([type, info]) => ({ type, ...info }));
   }, [hotel]);
 
-  // Reset roomSelections if roomTypes change (e.g., after hotel loads)
+  // Set default selected type when roomTypes change
   React.useEffect(() => {
-    if (roomTypes.length > 0 && Object.keys(roomSelections).length === 0) {
-      // Initialize all room types to 0
-      const initial: { [type: string]: number } = {};
-      for (const t of roomTypes) initial[t.type] = 0;
-      setRoomSelections(initial);
+    if (roomTypes.length > 0 && !selectedRoomType) {
+      // Pick first available type
+      const firstAvailable = roomTypes.find((rt) => rt.available > 0);
+      if (firstAvailable) setSelectedRoomType(firstAvailable.type);
     }
-    // Remove types that are no longer present
-    else if (roomTypes.length > 0) {
-      setRoomSelections((prev) => {
-        const updated: { [type: string]: number } = {};
-        for (const t of roomTypes) {
-          updated[t.type] = prev[t.type] ?? 0;
-        }
-        return updated;
-      });
+    // If selected type is no longer available, reset
+    else if (selectedRoomType) {
+      const found = roomTypes.find((rt) => rt.type === selectedRoomType);
+      if (!found || found.available < 1) setSelectedRoomType("");
     }
-  }, [roomTypes]);
+  }, [roomTypes, selectedRoomType]);
 
-  // Estimate price for all rooms
+  // Estimate price for selected room type
   const estimatedPrice = useMemo(() => {
-    return roomTypes
-      .reduce((sum, t) => {
-        const count = roomSelections[t.type] || 0;
-        return sum + count * t.price;
-      }, 0)
-      .toFixed(2);
-  }, [roomTypes, roomSelections]);
+    const t = roomTypes.find((rt) => rt.type === selectedRoomType);
+    return t ? t.price.toFixed(2) : "0.00";
+  }, [roomTypes, selectedRoomType]);
 
-  // Can book if at least one room is selected and all selections are valid
+  // Can book if a type is selected and available
   const canBook = useMemo(() => {
-    return (
-      Object.values(roomSelections).some((count) => count > 0) &&
-      roomTypes.every((t) => (roomSelections[t.type] ?? 0) <= t.available)
-    );
-  }, [roomSelections, roomTypes]);
-
-  const handleRoomSelectionChange = (type: string, value: number) => {
-    setRoomSelections((prev) => ({
-      ...prev,
-      [type]: value,
-    }));
-  };
+    const t = roomTypes.find((rt) => rt.type === selectedRoomType);
+    return t && t.available > 0;
+  }, [roomTypes, selectedRoomType]);
 
   const handleBook = () => {
-    // At least one room type must be selected
-    const selected = Object.entries(roomSelections).filter(
-      ([_, count]) => count > 0
-    );
-    if (selected.length === 0) {
-      alert("Please select at least one room.");
+    if (!selectedRoomType) {
+      alert("Please select a room type.");
       return;
     }
-    // Check for overbooking
-    for (const [type, count] of selected) {
-      const room = roomTypes.find((t) => t.type === type);
-      if (!room || count > room.available) {
-        alert(
-          `Cannot book ${count} rooms for type "${type}": only ${
-            room?.available ?? 0
-          } available.`
-        );
-        return;
-      }
+    const t = roomTypes.find((rt) => rt.type === selectedRoomType);
+    if (!t || t.available < 1) {
+      alert("No available rooms for selected type.");
+      return;
     }
-    // Build room selections for query string
-    // Format: "Deluxe:2,Standard:1"
-    const roomsParam = selected
-      .map(([type, count]) => `${encodeURIComponent(type)}:${count}`)
-      .join(",");
-
+    // Only booking 1 room
+    const roomsParam = `${encodeURIComponent(selectedRoomType)}:1`;
     const url = `/reservation?hotelId=${hotelId}&rooms=${roomsParam}&occupants=${occupants}`;
     router.push(url);
   };
@@ -226,53 +190,35 @@ export default function HotelDetailsPage({
                   id="booking-panel-title"
                   className="text-xl font-semibold mb-4 text-gray-900 dark:text-white"
                 >
-                  Book Your Rooms
+                  Book Your Room
                 </h3>
-                {/* Room type selections */}
-                <div>
+                {/* Room type selection */}
+                <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
-                    Select rooms{" "}
-                    <span className="text-xs text-gray-500">(per type)</span>
+                    Room Type
                   </label>
-                  <div className="space-y-3">
+                  <select
+                    aria-label="Room Type"
+                    value={selectedRoomType}
+                    onChange={(e) => setSelectedRoomType(e.target.value)}
+                    className="rounded-md px-4 py-2 border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/70 text-base w-full"
+                  >
+                    <option value="">Select room type</option>
                     {roomTypes.map((t) => (
-                      <div
+                      <option
                         key={t.type}
-                        className="flex items-center gap-4 justify-between"
+                        value={t.type}
+                        disabled={t.available < 1}
                       >
-                        <span className="font-medium text-gray-800 dark:text-gray-100">
-                          {t.type}{" "}
-                          <span className="text-xs text-gray-500">
-                            (${t.price.toFixed(2)}, {t.available} available)
-                          </span>
-                        </span>
-                        <select
-                          aria-label={`Number of ${t.type} rooms`}
-                          value={roomSelections[t.type] ?? 0}
-                          onChange={(e) =>
-                            handleRoomSelectionChange(
-                              t.type,
-                              Number(e.target.value)
-                            )
-                          }
-                          className="rounded-md px-4 py-2 border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/70 text-base"
-                        >
-                          {Array.from(
-                            { length: t.available + 1 },
-                            (_, i) => i
-                          ).map((n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                        {t.type} (${t.price.toFixed(2)}, {t.available}{" "}
+                        available)
+                      </option>
                     ))}
-                  </div>
+                  </select>
                 </div>
 
                 {/* Occupants selection */}
-                <div className="mt-6">
+                <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">
                     Occupants
                   </label>
@@ -296,7 +242,7 @@ export default function HotelDetailsPage({
                 </div>
 
                 {/* Price estimate */}
-                <div className="mt-8">
+                <div className="mb-8">
                   <div className="text-sm text-gray-600 dark:text-gray-300 mb-1">
                     Estimated from
                   </div>
@@ -310,7 +256,7 @@ export default function HotelDetailsPage({
               </div>
 
               {/* Book button */}
-              <div className="pt-6">
+              <div>
                 <Button
                   onClick={handleBook}
                   className="w-full text-lg font-semibold py-3"
@@ -318,8 +264,8 @@ export default function HotelDetailsPage({
                   aria-disabled={!canBook}
                   title={
                     !canBook
-                      ? "Please select at least one room to book"
-                      : "Book selected rooms"
+                      ? "Please select a room type to book"
+                      : "Book selected room"
                   }
                 >
                   {canBook ? "Book Now" : "Unavailable"}

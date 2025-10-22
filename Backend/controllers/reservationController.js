@@ -18,10 +18,12 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
  * Routes should apply authenticateToken / authenticateClerkToken as appropriate.
  */
 
+// --- Updated: createReservation to support multiple roomIds ---
 async function createReservation(req, res) {
     const {
         hotelId,
         roomType,
+        roomIds, // Array of room IDs to assign
         arrivalDate,
         departureDate,
         guests,
@@ -30,25 +32,21 @@ async function createReservation(req, res) {
         fullName,
         email,
         phone,
-        // You can add additional fields if you start supporting roomSelections (see note below)
+        // durationType,       // REMOVE (not in schema)
+        // durationCount,      // REMOVE (not in schema)
     } = req.body;
     const customerId = req.user && req.user.customerProfileId;
 
-    if (!customerId) {
-        return res.status(400).json({ error: "Customer profile not found. Please log in again." });
-    }
-    if (!hotelId) {
-        return res.status(400).json({ error: "Hotel ID is required." });
-    }
-    if (!roomType) {
-        return res.status(400).json({ error: "Room type is required." });
+    if (!customerId) return res.status(400).json({ error: "Customer profile not found. Please log in again." });
+    if (!hotelId) return res.status(400).json({ error: "Hotel ID is required." });
+    if (!roomType) return res.status(400).json({ error: "Room type is required." });
+    if (!Array.isArray(roomIds) || roomIds.length === 0) {
+        return res.status(400).json({ error: "At least one room must be selected." });
     }
 
     // Optional: validate hotel exists
     const hotel = await prisma.hotel.findUnique({ where: { id: Number(hotelId) } });
-    if (!hotel) {
-        return res.status(404).json({ error: "Hotel not found." });
-    }
+    if (!hotel) return res.status(404).json({ error: "Hotel not found." });
 
     try {
         let paymentIntent = null;
@@ -67,36 +65,44 @@ async function createReservation(req, res) {
             clientSecret = paymentIntent.client_secret;
         }
 
-        const reservation = await prisma.reservation.create({
-            data: {
-                customerId,
-                hotelId: Number(hotelId),
-                roomType,
-                arrivalDate: new Date(arrivalDate),
-                departureDate: new Date(departureDate),
-                guests,
-                totalAmount,
-                status,
-                paymentIntentId,
-                guestName: fullName,
-                guestEmail: email,
-                guestPhone: phone,
-            },
-        });
+        // Create one reservation per roomId
+        const reservations = await Promise.all(
+            roomIds.map(roomId =>
+                prisma.reservation.create({
+                    data: {
+                        customer: { connect: { id: customerId } },
+                        hotel: { connect: { id: Number(hotelId) } },
+                        roomType,
+                        room: { connect: { id: Number(roomId) } },
+                        arrivalDate: new Date(arrivalDate),
+                        departureDate: departureDate ? new Date(departureDate) : null,
+                        guests,
+                        totalAmount,
+                        status,
+                        paymentIntentId,
+                        guestName: fullName,
+                        guestEmail: email,
+                        guestPhone: phone,
+                    },
+                })
+            )
+        );
 
-        res.json({ reservation, clientSecret });
+        res.json({ reservations, clientSecret });
     } catch (err) {
         console.error("createReservation error:", err);
         res.status(500).json({ error: err.message });
     }
 }
 
+// --- Updated: createResidentialReservation to support multiple roomIds ---
 async function createResidentialReservation(req, res) {
     const {
         hotelId,
         roomType, // expected "residential"
-        durationType, // "week" or "month"
-        durationCount,
+        roomIds,
+        // durationType,    // REMOVE (not in schema)
+        // durationCount,   // REMOVE (not in schema)
         arrivalDate,
         departureDate,
         guests,
@@ -108,18 +114,15 @@ async function createResidentialReservation(req, res) {
     } = req.body;
     const customerId = req.user && req.user.customerProfileId;
 
-    if (!customerId) {
-        return res.status(400).json({ error: "Customer profile not found. Please log in again." });
-    }
-    if (!hotelId) {
-        return res.status(400).json({ error: "Hotel ID is required." });
+    if (!customerId) return res.status(400).json({ error: "Customer profile not found. Please log in again." });
+    if (!hotelId) return res.status(400).json({ error: "Hotel ID is required." });
+    if (!Array.isArray(roomIds) || roomIds.length === 0) {
+        return res.status(400).json({ error: "At least one room must be selected." });
     }
 
     // Optional: validate hotel exists
     const hotel = await prisma.hotel.findUnique({ where: { id: Number(hotelId) } });
-    if (!hotel) {
-        return res.status(404).json({ error: "Hotel not found." });
-    }
+    if (!hotel) return res.status(404).json({ error: "Hotel not found." });
 
     try {
         let paymentIntent = null;
@@ -138,26 +141,29 @@ async function createResidentialReservation(req, res) {
             clientSecret = paymentIntent.client_secret;
         }
 
-        const reservation = await prisma.reservation.create({
-            data: {
-                customerId,
-                hotelId: Number(hotelId),
-                roomType: "residential",
-                arrivalDate: new Date(arrivalDate),
-                departureDate: departureDate ? new Date(departureDate) : null,
-                guests,
-                totalAmount,
-                status,
-                paymentIntentId,
-                durationType,
-                durationCount,
-                guestName: fullName,
-                guestEmail: email,
-                guestPhone: phone,
-            },
-        });
+        const reservations = await Promise.all(
+            roomIds.map(roomId =>
+                prisma.reservation.create({
+                    data: {
+                        customer: { connect: { id: customerId } },
+                        hotel: { connect: { id: Number(hotelId) } },
+                        roomType,
+                        room: { connect: { id: Number(roomId) } },
+                        arrivalDate: new Date(arrivalDate),
+                        departureDate: departureDate ? new Date(departureDate) : null,
+                        guests,
+                        totalAmount,
+                        status,
+                        paymentIntentId,
+                        guestName: fullName,
+                        guestEmail: email,
+                        guestPhone: phone,
+                    },
+                })
+            )
+        );
 
-        res.json({ reservation, clientSecret });
+        res.json({ reservations, clientSecret });
     } catch (err) {
         console.error("createResidentialReservation error:", err);
         res.status(500).json({ error: err.message });
@@ -197,8 +203,8 @@ async function updateReservation(req, res) {
         departureDate,
         guests,
         totalAmount,
-        durationType,
-        durationCount,
+        // durationType,   // REMOVE (not in schema)
+        // durationCount,  // REMOVE (not in schema)
     } = req.body;
 
     if (!customerId) {
@@ -233,8 +239,6 @@ async function updateReservation(req, res) {
                 departureDate: departureDate ? new Date(departureDate) : null,
                 guests,
                 totalAmount,
-                durationType,
-                durationCount,
             },
         });
 
