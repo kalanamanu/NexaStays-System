@@ -28,7 +28,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, Edit, Trash2, Calendar, User as UserIcon } from "lucide-react";
+import {
+  Search,
+  Edit,
+  Trash2,
+  Calendar,
+  User as UserIcon,
+  Eye,
+} from "lucide-react";
 import NavBar from "@/components/nav-bar";
 import { useUser } from "@/context/user-context";
 import { useRouter } from "next/navigation";
@@ -54,6 +61,8 @@ interface Reservation {
     name: string;
   };
   roomQuantity?: number;
+  roomNumber?: string;
+  room?: { number?: string };
 }
 
 const ROOM_TYPES = [
@@ -406,150 +415,6 @@ export default function CustomerDashboard() {
                 Manage your reservations and bookings
               </p>
             </div>
-            {/* Edit Profile Button */}
-            <Dialog open={editOpen} onOpenChange={setEditOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="flex items-center gap-2"
-                  onClick={() => setEditOpen(true)}
-                >
-                  <UserIcon className="h-4 w-4" />
-                  Edit Profile
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto py-10 px-8 rounded-2xl">
-                <DialogHeader>
-                  <DialogTitle className="text-2xl mb-2">
-                    Edit Profile
-                  </DialogTitle>
-                  <DialogDescription className="mb-6">
-                    Update your personal information below.
-                  </DialogDescription>
-                </DialogHeader>
-                <form>
-                  <div className="space-y-5">
-                    <div>
-                      <label
-                        htmlFor="firstName"
-                        className="block text-sm font-semibold mb-1"
-                      >
-                        First Name
-                      </label>
-                      <Input
-                        id="firstName"
-                        name="firstName"
-                        placeholder="First Name"
-                        value={editProfile.firstName}
-                        onChange={handleProfileChange}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="lastName"
-                        className="block text-sm font-semibold mb-1"
-                      >
-                        Last Name
-                      </label>
-                      <Input
-                        id="lastName"
-                        name="lastName"
-                        placeholder="Last Name"
-                        value={editProfile.lastName}
-                        onChange={handleProfileChange}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="phone"
-                        className="block text-sm font-semibold mb-1"
-                      >
-                        Phone
-                      </label>
-                      <Input
-                        id="phone"
-                        name="phone"
-                        placeholder="Phone"
-                        value={editProfile.phone}
-                        onChange={handleProfileChange}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="country"
-                        className="block text-sm font-semibold mb-1"
-                      >
-                        Country
-                      </label>
-                      <Input
-                        id="country"
-                        name="country"
-                        placeholder="Country"
-                        value={editProfile.country}
-                        onChange={handleProfileChange}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="nic"
-                        className="block text-sm font-semibold mb-1"
-                      >
-                        NIC
-                      </label>
-                      <Input
-                        id="nic"
-                        name="nic"
-                        placeholder="NIC"
-                        value={editProfile.nic}
-                        onChange={handleProfileChange}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="birthDay"
-                        className="block text-sm font-semibold mb-1"
-                      >
-                        Birthday
-                      </label>
-                      <Input
-                        id="birthDay"
-                        name="birthDay"
-                        type="date"
-                        placeholder="Birthday"
-                        value={editProfile.birthDay}
-                        onChange={handleProfileChange}
-                      />
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="address"
-                        className="block text-sm font-semibold mb-1"
-                      >
-                        Address
-                      </label>
-                      <Input
-                        id="address"
-                        name="address"
-                        placeholder="Address"
-                        value={editProfile.address}
-                        onChange={handleProfileChange}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter className="mt-8">
-                    <Button
-                      variant="outline"
-                      onClick={() => setEditOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="button" onClick={handleProfileSave}>
-                      Save Changes
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
           </div>
 
           {/* Quick Actions */}
@@ -627,6 +492,7 @@ export default function CustomerDashboard() {
                       <TableHead>Reservation ID</TableHead>
                       <TableHead>Hotel</TableHead>
                       <TableHead>Room Type</TableHead>
+                      <TableHead>Room Number</TableHead>
                       <TableHead>Check-in</TableHead>
                       <TableHead>Check-out</TableHead>
                       <TableHead>Status</TableHead>
@@ -654,6 +520,12 @@ export default function CustomerDashboard() {
                           </TableCell>
                           <TableCell>{reservation.roomType}</TableCell>
                           <TableCell>
+                            {reservation.roomNumber ||
+                              reservation.room?.number || (
+                                <span className="text-gray-400">N/A</span>
+                              )}
+                          </TableCell>
+                          <TableCell>
                             {new Date(
                               reservation.arrivalDate
                             ).toLocaleDateString()}
@@ -663,7 +535,6 @@ export default function CustomerDashboard() {
                               reservation.departureDate
                             ).toLocaleDateString()}
                           </TableCell>
-
                           <TableCell>
                             <Badge
                               className={getStatusColor(reservation.status)}
@@ -675,151 +546,31 @@ export default function CustomerDashboard() {
                           <TableCell>${reservation.totalAmount}</TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
-                              {/* Edit Reservation Dialog */}
-                              <Dialog
-                                open={
-                                  reservationEditOpen &&
-                                  reservationToEdit?.id === reservation.id
+                              {/* view button */}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  router.push(
+                                    `/reservation/view/${reservation.id}`
+                                  )
                                 }
-                                onOpenChange={(open) => {
-                                  setReservationEditOpen(open);
-                                  if (!open) setReservationToEdit(null);
-                                }}
                               >
-                                <DialogTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={
-                                      reservation.status === "cancelled"
-                                    }
-                                    onClick={() => {
-                                      setReservationToEdit(reservation);
-                                      setReservationEditOpen(true);
-                                    }}
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                  <DialogHeader>
-                                    <DialogTitle>Edit Reservation</DialogTitle>
-                                    <DialogDescription>
-                                      Update your reservation details below.
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <form
-                                    onSubmit={(e) => {
-                                      e.preventDefault();
-                                      handleReservationEditSave();
-                                    }}
-                                  >
-                                    <div className="space-y-4">
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-1">
-                                          Room Type
-                                        </label>
-                                        <Select
-                                          value={reservationEditForm.roomType}
-                                          onValueChange={(value) =>
-                                            handleReservationEditChange(value)
-                                          }
-                                        >
-                                          <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Select room type" />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {ROOM_TYPES.map((rt) => (
-                                              <SelectItem
-                                                key={rt.value}
-                                                value={rt.value}
-                                              >
-                                                {rt.label}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-1">
-                                          Check-in Date
-                                        </label>
-                                        <Input
-                                          type="date"
-                                          name="arrivalDate"
-                                          value={
-                                            reservationEditForm.arrivalDate
-                                          }
-                                          onChange={handleReservationEditChange}
-                                          required
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-1">
-                                          Check-out Date
-                                        </label>
-                                        <Input
-                                          type="date"
-                                          name="departureDate"
-                                          value={
-                                            reservationEditForm.departureDate
-                                          }
-                                          onChange={handleReservationEditChange}
-                                          required
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-1">
-                                          Guests
-                                        </label>
-                                        <Input
-                                          type="number"
-                                          name="guests"
-                                          min={1}
-                                          max={10}
-                                          value={reservationEditForm.guests}
-                                          onChange={handleReservationEditChange}
-                                          required
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-1">
-                                          Total Amount ($)
-                                        </label>
-                                        <Input
-                                          type="number"
-                                          name="totalAmount"
-                                          value={
-                                            reservationEditForm.totalAmount
-                                          }
-                                          readOnly
-                                          required
-                                        />
-                                      </div>
-                                    </div>
-                                    <DialogFooter className="mt-6">
-                                      <Button
-                                        variant="outline"
-                                        type="button"
-                                        onClick={() => {
-                                          setReservationEditOpen(false);
-                                          setReservationToEdit(null);
-                                        }}
-                                        disabled={reservationEditLoading}
-                                      >
-                                        Cancel
-                                      </Button>
-                                      <Button
-                                        type="submit"
-                                        disabled={reservationEditLoading}
-                                      >
-                                        Save Changes
-                                      </Button>
-                                    </DialogFooter>
-                                  </form>
-                                </DialogContent>
-                              </Dialog>
-                              {/* Cancel Reservation Dialog */}
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              {/* Edit button */}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={reservation.status === "cancelled"}
+                                onClick={() =>
+                                  router.push(
+                                    `/reservation/edit/${reservation.id}`
+                                  )
+                                }
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
                               {/* Delete Reservation Dialog */}
                               <Dialog
                                 open={

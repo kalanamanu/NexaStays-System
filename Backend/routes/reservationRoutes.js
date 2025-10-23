@@ -3,7 +3,7 @@ const router = express.Router();
 const { authenticateToken, authenticateClerkToken } = require("../middleware/authenticateToken");
 const reservationController = require("../controllers/reservationController");
 
-// Logging middleware (keeps same behavior as your original file)
+// Logging middleware
 router.use((req, res, next) => {
     console.log("Reservations API - req.user:", req.user);
     next();
@@ -13,6 +13,7 @@ router.use((req, res, next) => {
 router.post("/", authenticateToken, reservationController.createReservation);
 router.post("/residential", authenticateToken, reservationController.createResidentialReservation);
 router.get("/", authenticateToken, reservationController.getReservations);
+router.get("/:id", authenticateToken, reservationController.getReservationById);
 router.put("/:id", authenticateToken, reservationController.updateReservation);
 router.delete("/:id", authenticateToken, reservationController.deleteReservation);
 

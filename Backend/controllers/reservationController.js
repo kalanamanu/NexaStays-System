@@ -18,6 +18,29 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
  * Routes should apply authenticateToken / authenticateClerkToken as appropriate.
  */
 
+async function getReservations(req, res) {
+    const customerId = req.user && req.user.customerProfileId;
+
+    if (!customerId) {
+        return res.status(400).json({ error: "Customer profile not found. Please log in again." });
+    }
+
+    try {
+        const reservations = await prisma.reservation.findMany({
+            where: { customerId },
+            orderBy: { createdAt: "desc" },
+            include: {
+                hotel: true,
+                room: true,
+            },
+        });
+        res.json({ reservations });
+    } catch (err) {
+        console.error("getReservations error:", err);
+        res.status(500).json({ error: "Failed to fetch reservations." });
+    }
+}
+
 // --- Updated: createReservation to support multiple roomIds ---
 async function createReservation(req, res) {
     const {
@@ -32,6 +55,7 @@ async function createReservation(req, res) {
         fullName,
         email,
         phone,
+        roomNumber, // <-- ADD THIS to accept roomNumber from frontend (optional)
         // durationType,       // REMOVE (not in schema)
         // durationCount,      // REMOVE (not in schema)
     } = req.body;
@@ -67,13 +91,24 @@ async function createReservation(req, res) {
 
         // Create one reservation per roomId
         const reservations = await Promise.all(
-            roomIds.map(roomId =>
-                prisma.reservation.create({
+            roomIds.map(async roomId => {
+                // Find the room in DB to get the "number" if not provided
+                let resolvedRoomNumber = roomNumber;
+                if (!roomNumber) {
+                    const roomObj = await prisma.room.findUnique({
+                        where: { id: Number(roomId) },
+                        select: { number: true }
+                    });
+                    resolvedRoomNumber = roomObj?.number || "";
+                }
+
+                const reservation = await prisma.reservation.create({
                     data: {
                         customer: { connect: { id: customerId } },
                         hotel: { connect: { id: Number(hotelId) } },
                         roomType,
                         room: { connect: { id: Number(roomId) } },
+                        roomNumber: resolvedRoomNumber,
                         arrivalDate: new Date(arrivalDate),
                         departureDate: departureDate ? new Date(departureDate) : null,
                         guests,
@@ -84,8 +119,14 @@ async function createReservation(req, res) {
                         guestEmail: email,
                         guestPhone: phone,
                     },
-                })
-            )
+                });
+                // Update room status to reserved
+                await prisma.room.update({
+                    where: { id: Number(roomId) },
+                    data: { status: "reserved" }
+                });
+                return reservation;
+            })
         );
 
         res.json({ reservations, clientSecret });
@@ -99,10 +140,8 @@ async function createReservation(req, res) {
 async function createResidentialReservation(req, res) {
     const {
         hotelId,
-        roomType, // expected "residential"
+        roomType,
         roomIds,
-        // durationType,    // REMOVE (not in schema)
-        // durationCount,   // REMOVE (not in schema)
         arrivalDate,
         departureDate,
         guests,
@@ -111,6 +150,7 @@ async function createResidentialReservation(req, res) {
         fullName,
         email,
         phone,
+        roomNumber,
     } = req.body;
     const customerId = req.user && req.user.customerProfileId;
 
@@ -142,13 +182,24 @@ async function createResidentialReservation(req, res) {
         }
 
         const reservations = await Promise.all(
-            roomIds.map(roomId =>
-                prisma.reservation.create({
+            roomIds.map(async roomId => {
+                // Find the room in DB to get the "number" if not provided
+                let resolvedRoomNumber = roomNumber;
+                if (!roomNumber) {
+                    const roomObj = await prisma.room.findUnique({
+                        where: { id: Number(roomId) },
+                        select: { number: true }
+                    });
+                    resolvedRoomNumber = roomObj?.number || "";
+                }
+
+                const reservation = await prisma.reservation.create({
                     data: {
                         customer: { connect: { id: customerId } },
                         hotel: { connect: { id: Number(hotelId) } },
                         roomType,
                         room: { connect: { id: Number(roomId) } },
+                        roomNumber: resolvedRoomNumber, // <-- store human room number for display
                         arrivalDate: new Date(arrivalDate),
                         departureDate: departureDate ? new Date(departureDate) : null,
                         guests,
@@ -159,37 +210,20 @@ async function createResidentialReservation(req, res) {
                         guestEmail: email,
                         guestPhone: phone,
                     },
-                })
-            )
+                });
+                // Update room status to reserved
+                await prisma.room.update({
+                    where: { id: Number(roomId) },
+                    data: { status: "reserved" }
+                });
+                return reservation;
+            })
         );
 
         res.json({ reservations, clientSecret });
     } catch (err) {
         console.error("createResidentialReservation error:", err);
         res.status(500).json({ error: err.message });
-    }
-}
-
-async function getReservations(req, res) {
-    const customerId = req.user && req.user.customerProfileId;
-
-    if (!customerId) {
-        return res.status(400).json({ error: "Customer profile not found. Please log in again." });
-    }
-
-    try {
-        const reservations = await prisma.reservation.findMany({
-            where: { customerId },
-            orderBy: { createdAt: "desc" },
-            include: {
-                hotel: true,
-                room: true,
-            },
-        });
-        res.json({ reservations });
-    } catch (err) {
-        console.error("getReservations error:", err);
-        res.status(500).json({ error: "Failed to fetch reservations." });
     }
 }
 
@@ -203,8 +237,6 @@ async function updateReservation(req, res) {
         departureDate,
         guests,
         totalAmount,
-        // durationType,   // REMOVE (not in schema)
-        // durationCount,  // REMOVE (not in schema)
     } = req.body;
 
     if (!customerId) {
@@ -260,10 +292,19 @@ async function deleteReservation(req, res) {
     try {
         const reservation = await prisma.reservation.findUnique({
             where: { id: reservationId },
+            include: { room: true }, // <-- include room relation
         });
 
         if (!reservation || reservation.customerId !== customerId) {
             return res.status(403).json({ error: "Unauthorized or reservation not found." });
+        }
+
+        // Before deleting, set room status to available if there is a related room
+        if (reservation.roomId) {
+            await prisma.room.update({
+                where: { id: reservation.roomId },
+                data: { status: "available" },
+            });
         }
 
         await prisma.reservation.delete({
@@ -423,6 +464,33 @@ async function checkoutReservation(req, res) {
     }
 }
 
+async function getReservationById(req, res) {
+    const reservationId = Number(req.params.id);
+    if (!reservationId) {
+        return res.status(400).json({ error: "Reservation ID is required." });
+    }
+
+    try {
+        const reservation = await prisma.reservation.findUnique({
+            where: { id: reservationId },
+            include: {
+                hotel: true,
+                room: true,
+                customer: true,
+            },
+        });
+
+        if (!reservation) {
+            return res.status(404).json({ error: "Reservation not found." });
+        }
+
+        res.json({ reservation });
+    } catch (err) {
+        console.error("getReservationById error:", err);
+        res.status(500).json({ error: "Failed to fetch reservation." });
+    }
+}
+
 module.exports = {
     createReservation,
     createResidentialReservation,
@@ -433,4 +501,5 @@ module.exports = {
     createClerkReservation,
     checkinReservation,
     checkoutReservation,
+    getReservationById,
 };

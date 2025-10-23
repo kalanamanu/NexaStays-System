@@ -94,6 +94,13 @@ export default function ReservationPage() {
   const hotelIdParam = searchParams.get("hotelId") || "";
   const occupantsParam = (searchParams.get("occupants") || "1").toString();
 
+  const roomsParam = searchParams.get("rooms");
+  let initialRoomType = "";
+  if (roomsParam) {
+    const first = roomsParam.split(",")[0]?.split(":")[0];
+    initialRoomType = first ? decodeURIComponent(first).toLowerCase() : "";
+  }
+
   // Fetch all hotels for dropdown
   const { data: hotelsData, isLoading: hotelsLoading } = useSWR(
     "/api/hotels",
@@ -141,7 +148,8 @@ export default function ReservationPage() {
   });
 
   // Single room selection states
-  const [selectedRoomType, setSelectedRoomType] = useState<string>("");
+  const [selectedRoomType, setSelectedRoomType] =
+    useState<string>(initialRoomType);
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
 
   // Track if autofill from params has happened, so it only happens once per hotel selection
@@ -249,15 +257,32 @@ export default function ReservationPage() {
 
   // Autofill selectedRoomType and selectedRoomId on load
   useEffect(() => {
-    if (
-      availableRoomTypeDetails.length > 0 &&
-      (!selectedRoomType ||
-        !availableRoomTypeDetails.find((t) => t.type === selectedRoomType))
-    ) {
-      setSelectedRoomType(availableRoomTypeDetails[0].type);
-      const firstRoom = availableRoomTypeDetails[0].rooms?.[0];
-      setSelectedRoomId(firstRoom ? firstRoom.id.toString() : "");
-    } else if (selectedRoomType) {
+    // If there are room types available
+    if (availableRoomTypeDetails.length > 0) {
+      // If nothing selected or current selection is not valid
+      if (
+        !selectedRoomType ||
+        !availableRoomTypeDetails.find((t) => t.type === selectedRoomType)
+      ) {
+        // Try to use initialRoomType from URL params if it's valid
+        const foundFromParam =
+          initialRoomType &&
+          availableRoomTypeDetails.find((t) => t.type === initialRoomType);
+        if (foundFromParam) {
+          setSelectedRoomType(foundFromParam.type);
+          const firstRoom = foundFromParam.rooms?.[0];
+          setSelectedRoomId(firstRoom ? firstRoom.id.toString() : "");
+          return;
+        } else {
+          // Default to first available type
+          setSelectedRoomType(availableRoomTypeDetails[0].type);
+          const firstRoom = availableRoomTypeDetails[0].rooms?.[0];
+          setSelectedRoomId(firstRoom ? firstRoom.id.toString() : "");
+          return;
+        }
+      }
+
+      // If a room type is selected, but selectedRoomId is not valid, reset to first available
       const foundType = availableRoomTypeDetails.find(
         (t) => t.type === selectedRoomType
       );
@@ -269,6 +294,7 @@ export default function ReservationPage() {
         setSelectedRoomId("");
       }
     }
+    // eslint-disable-next-line
   }, [availableRoomTypeDetails, selectedRoomType, selectedRoomId]);
 
   useEffect(() => {
@@ -399,11 +425,17 @@ export default function ReservationPage() {
     }
     setIsLoading(true);
 
+    const selectedRoomObj = (
+      availableRoomTypeDetails.find((t) => t.type === selectedRoomType)
+        ?.rooms ?? []
+    ).find((room) => room.id.toString() === selectedRoomId);
+
     try {
       const reqBody = {
         hotelId: formData.hotelId,
         roomType: selectedRoomType,
-        roomIds: [selectedRoomId], // only one room
+        roomIds: [selectedRoomId],
+        roomNumber: selectedRoomObj?.number || "",
         arrivalDate: formData.arrivalDate?.toISOString(),
         departureDate: formData.departureDate?.toISOString(),
         guests: Number(formData.occupants),
@@ -481,11 +513,17 @@ export default function ReservationPage() {
     if (!validateResidential()) return;
     setIsLoading(true);
 
+    const selectedRoomObj = (
+      availableRoomTypeDetails.find((t) => t.type === selectedRoomType)
+        ?.rooms ?? []
+    ).find((room) => room.id.toString() === selectedRoomId);
+
     try {
       const reqBody = {
         hotelId: residentialForm.hotelId,
         roomType: "residential",
-        roomIds: [selectedRoomId], // only one room for residential too
+        roomIds: [selectedRoomId],
+        roomNumber: selectedRoomObj?.number || "",
         durationType: residentialForm.durationType,
         durationCount: residentialForm.durationCount,
         arrivalDate: residentialForm.arrivalDate?.toISOString(),
