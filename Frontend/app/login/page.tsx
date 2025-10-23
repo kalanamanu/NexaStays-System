@@ -76,7 +76,7 @@ export default function LoginPage() {
             router.push("/dashboard/manager");
             break;
           case "travel-company":
-            router.push("/travel-portal");
+            router.push("/dashboard/company");
             break;
           default:
             router.push("/");
@@ -97,7 +97,7 @@ export default function LoginPage() {
             router.push("/dashboard/manager");
             break;
           case "travel-company":
-            router.push("/travel-portal");
+            router.push("/dashboard/company");
             break;
           default:
             router.push("/");

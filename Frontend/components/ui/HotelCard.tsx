@@ -63,7 +63,7 @@ export default function HotelCard({ hotel }: { hotel: Hotel }) {
                 From
               </div>
               <div className="text-2xl font-extrabold text-gray-900 dark:text-white">
-                ${hotel.startingPrice ?? "N/A"}
+                LKR{hotel.startingPrice ?? "N/A"}
               </div>
               {hotel.status && (
                 <div className="mt-2">

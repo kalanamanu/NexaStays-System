@@ -462,7 +462,8 @@ export default function EditReservationPage() {
                             disabled={!t.rooms || t.rooms.length === 0}
                           >
                             {t.type.charAt(0).toUpperCase() + t.type.slice(1)}{" "}
-                            (${t.price}/night, {t.rooms?.length ?? 0} available)
+                            (LKR{t.price}/night, {t.rooms?.length ?? 0}{" "}
+                            available)
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -602,7 +603,7 @@ export default function EditReservationPage() {
                 <div className="my-6 p-4 rounded-lg bg-gray-50 dark:bg-gray-800 flex items-center justify-between">
                   <span className="font-semibold text-lg">Total Amount</span>
                   <span className="font-bold text-2xl text-green-700 dark:text-green-300">
-                    ${totalAmount}
+                    LKR{totalAmount}
                   </span>
                   <span className="text-gray-500 ml-4 text-sm">
                     {nights} night{nights > 1 ? "s" : ""} x ${totalAmount}

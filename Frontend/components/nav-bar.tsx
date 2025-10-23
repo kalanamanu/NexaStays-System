@@ -12,9 +12,8 @@ import UserMenu from "@/components/ui/UserMenu";
 
 /**
  * NavBar
- * - Left: Brand (Nexa Stays)
- * - Middle: Primary navigation (Home, Our Hotels, About, Contact Us)
- * - Right: Theme toggle + Login/Register (if logged out) OR UserMenu (when logged in)
+ * - For "Travel Company" users: hide main nav links and disable home link
+ * - For all others: show normal nav
  *
  * Save this file as: components/nav-bar.tsx
  */
@@ -36,6 +35,9 @@ export default function NavBar() {
     { href: "/contact", label: "Contact Us" },
   ];
 
+  // Check if the user is Travel Company
+  const isTravelCompany = user?.role?.toLowerCase() === "travel-company";
+
   if (!mounted) return null;
 
   return (
@@ -49,27 +51,36 @@ export default function NavBar() {
         <div className="flex items-center h-16 justify-between">
           {/* Left: Brand */}
           <div className="flex items-center flex-1">
-            <Link href="/" className="flex items-center space-x-3">
-              <span className="text-2xl font-bold bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">
+            {isTravelCompany ? (
+              // Just display the brand, no link
+              <span className="text-2xl font-bold bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent select-none cursor-default">
                 Nexa Stays
               </span>
-            </Link>
+            ) : (
+              <Link href="/" className="flex items-center space-x-3">
+                <span className="text-2xl font-bold bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent">
+                  Nexa Stays
+                </span>
+              </Link>
+            )}
           </div>
 
           {/* Middle: Primary navigation (visible on md+) */}
-          <div className="hidden md:flex items-center justify-center flex-1">
-            <div className="flex items-center space-x-4">
-              {primaryNav.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="px-4 py-2 text-sm font-medium text-white hover:text-purple-200 hover:bg-white/10 rounded-lg transition-all duration-200 backdrop-blur-sm"
-                >
-                  {link.label}
-                </Link>
-              ))}
+          {!isTravelCompany && (
+            <div className="hidden md:flex items-center justify-center flex-1">
+              <div className="flex items-center space-x-4">
+                {primaryNav.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="px-4 py-2 text-sm font-medium text-white hover:text-purple-200 hover:bg-white/10 rounded-lg transition-all duration-200 backdrop-blur-sm"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Right: Theme toggle + auth / user */}
           <div className="flex items-center justify-end flex-1 space-x-2">
@@ -166,18 +177,20 @@ export default function NavBar() {
                       )}
 
                       {/* Primary nav (mobile) */}
-                      <nav className="space-y-2">
-                        {primaryNav.map((link) => (
-                          <Link
-                            key={link.href}
-                            href={link.href}
-                            className="block rounded-md px-4 py-3 text-base font-medium text-white hover:bg-white/5"
-                            onClick={() => setIsOpen(false)}
-                          >
-                            {link.label}
-                          </Link>
-                        ))}
-                      </nav>
+                      {!isTravelCompany && (
+                        <nav className="space-y-2">
+                          {primaryNav.map((link) => (
+                            <Link
+                              key={link.href}
+                              href={link.href}
+                              className="block rounded-md px-4 py-3 text-base font-medium text-white hover:bg-white/5"
+                              onClick={() => setIsOpen(false)}
+                            >
+                              {link.label}
+                            </Link>
+                          ))}
+                        </nav>
+                      )}
 
                       <div className="pt-4 border-t border-white/6 mt-4">
                         <Button

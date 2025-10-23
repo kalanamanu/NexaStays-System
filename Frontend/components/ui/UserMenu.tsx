@@ -9,6 +9,8 @@ import {
   Settings,
   Layers,
   BookOpen,
+  PlusCircle,
+  LayoutDashboard,
 } from "lucide-react";
 import { useUser } from "@/context/user-context";
 import { Button } from "@/components/ui/button";
@@ -50,11 +52,7 @@ export default function UserMenu({ compact = false }: { compact?: boolean }) {
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
-      if (e.key === "Tab") {
-        // close on tab away to avoid trap (simple approach)
-        // More advanced focus-trap could be used.
-        setOpen(false);
-      }
+      if (e.key === "Tab") setOpen(false);
     }
     document.addEventListener("mousedown", onClick);
     document.addEventListener("keydown", onKey);
@@ -75,7 +73,10 @@ export default function UserMenu({ compact = false }: { compact?: boolean }) {
   }[] = [
     {
       label: "Profile",
-      href: "/dashboard/customer/profile",
+      href:
+        user.role === "travel-company"
+          ? "/dashboard/company/profile" // update if you have a company profile page
+          : "/dashboard/customer/profile",
       icon: <UserIcon className="h-4 w-4" />,
     },
   ];
@@ -110,11 +111,23 @@ export default function UserMenu({ compact = false }: { compact?: boolean }) {
       });
       break;
     case "travel-company":
-      menuItems.push({
-        label: "Travel Portal",
-        href: "/travel-portal",
-        icon: <Layers className="h-4 w-4" />,
-      });
+      menuItems.push(
+        {
+          label: "Dashboard",
+          href: "/dashboard/company",
+          icon: <LayoutDashboard className="h-4 w-4" />,
+        },
+        {
+          label: "Block Bookings",
+          href: "/dashboard/company/block-bookings",
+          icon: <BookOpen className="h-4 w-4" />,
+        },
+        {
+          label: "Create Block Booking",
+          href: "/dashboard/company/block-bookings/create",
+          icon: <PlusCircle className="h-4 w-4" />,
+        }
+      );
       break;
   }
 

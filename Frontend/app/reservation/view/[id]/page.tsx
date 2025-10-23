@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useParams } from "next/navigation";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
@@ -10,7 +10,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { CalendarIcon, Loader2 } from "lucide-react";
+import { CalendarIcon, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import NavBar from "@/components/nav-bar";
 import { format } from "date-fns";
@@ -24,6 +24,7 @@ export default function ViewReservationPage() {
 
   const [reservation, setReservation] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -41,6 +42,35 @@ export default function ViewReservationPage() {
         setLoading(false);
       });
   }, [id]);
+
+  const handleDownloadReceipt = async () => {
+    if (!id) return;
+    setDownloading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE}/api/reservations/${id}/receipt`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to download receipt.");
+      const blob = await res.blob();
+      // Create download link and click it
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Reservation_${id}_Receipt.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      alert("Could not download receipt. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (loading || !reservation) {
     return (
@@ -133,7 +163,7 @@ export default function ViewReservationPage() {
                   <div className="mt-1">{reservation.status}</div>
                 </div>
               </div>
-              <div className="mt-8 flex justify-end gap-2">
+              <div className="mt-8 flex flex-wrap justify-end gap-2">
                 <Button
                   variant="outline"
                   onClick={() => router.push("/dashboard/customer")}
@@ -147,6 +177,16 @@ export default function ViewReservationPage() {
                 >
                   Edit Reservation
                 </Button>
+                {reservation.status === "paid" && (
+                  <Button
+                    onClick={handleDownloadReceipt}
+                    disabled={downloading}
+                    variant="secondary"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    {downloading ? "Preparing receipt..." : "Download Receipt"}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

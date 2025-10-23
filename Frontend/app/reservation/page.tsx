@@ -773,7 +773,7 @@ export default function ReservationPage() {
                                 >
                                   {t.type.charAt(0).toUpperCase() +
                                     t.type.slice(1)}{" "}
-                                  (${t.price}/night, {t.rooms?.length ?? 0}{" "}
+                                  (LKR {t.price}/night, {t.rooms?.length ?? 0}{" "}
                                   available)
                                 </SelectItem>
                               ))}
@@ -919,10 +919,11 @@ export default function ReservationPage() {
                           Total Amount
                         </span>
                         <span className="font-bold text-2xl text-green-700 dark:text-green-300">
-                          ${totalAmount}
+                          LKR {totalAmount}
                         </span>
                         <span className="text-gray-500 ml-4 text-sm">
-                          {nights} night{nights > 1 ? "s" : ""} x ${totalAmount}
+                          {nights} night{nights > 1 ? "s" : ""} x LKR{" "}
+                          {totalAmount}
                           /night
                         </span>
                       </div>
@@ -1254,7 +1255,7 @@ export default function ReservationPage() {
                             Total Amount
                           </span>
                           <span className="font-bold text-2xl text-green-700 dark:text-green-300">
-                            ${residentialTotal}
+                            LKR {residentialTotal}
                           </span>
                           <span className="text-gray-500 ml-4 text-sm">
                             {residentialForm.durationCount}{" "}
@@ -1263,7 +1264,7 @@ export default function ReservationPage() {
                               : residentialForm.durationType === "month"
                               ? "month(s)"
                               : ""}{" "}
-                            x $
+                            x LKR
                             {residentialForm.durationType === "week"
                               ? RESIDENTIAL_WEEKLY_RATE
                               : residentialForm.durationType === "month"

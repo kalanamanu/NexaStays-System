@@ -5,6 +5,9 @@ const cors = require('cors');
 const app = require('./app');
 const stripeWebhookRoutes = require('./routes/stripeWebhookRoutes');
 
+// === ADD THIS LINE to always run your scheduled cron jobs ===
+require('./cron'); // <-- This line ensures your scheduled jobs run with the server
+
 const PORT = process.env.PORT || 5000;
 const serverApp = express();
 
@@ -12,9 +15,6 @@ serverApp.use(cors({
     origin: "http://localhost:3000",
     credentials: true
 }));
-serverApp.use('/webhooks/stripe', stripeWebhookRoutes);
-serverApp.use(express.json());
-serverApp.use('/', app);
 
 /**
  * Stripe webhooks must be parsed as raw body, BEFORE json/urlencoded middleware.

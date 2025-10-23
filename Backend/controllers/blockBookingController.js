@@ -154,9 +154,45 @@ async function deleteBlockBooking(req, res) {
     }
 }
 
+async function getBlockBookingById(req, res) {
+    try {
+        if (!req.user || req.user.role !== "travel-company") {
+            return res.status(403).json({ error: "Unauthorized" });
+        }
+
+        const { id } = req.params;
+        const travelCompanyId = req.user.travelCompanyProfileId;
+
+        if (!travelCompanyId) {
+            return res.status(400).json({ error: "Missing travel company profile. Please contact support." });
+        }
+
+        if (!id || isNaN(Number(id))) {
+            return res.status(400).json({ error: "Invalid block booking ID." });
+        }
+
+        const blockBooking = await prisma.blockBooking.findFirst({
+            where: {
+                id: Number(id),
+                travelCompanyId,
+            },
+        });
+
+        if (!blockBooking) {
+            return res.status(404).json({ error: "Block booking not found." });
+        }
+
+        res.json({ blockBooking });
+    } catch (err) {
+        console.error("Block booking get by id error:", err);
+        res.status(500).json({ error: err.message });
+    }
+}
+
 module.exports = {
     createBlockBooking,
     getBlockBookings,
     updateBlockBooking,
     deleteBlockBooking,
+    getBlockBookingById
 };

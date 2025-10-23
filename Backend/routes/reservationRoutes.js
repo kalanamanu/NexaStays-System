@@ -16,6 +16,8 @@ router.get("/", authenticateToken, reservationController.getReservations);
 router.get("/:id", authenticateToken, reservationController.getReservationById);
 router.put("/:id", authenticateToken, reservationController.updateReservation);
 router.delete("/:id", authenticateToken, reservationController.deleteReservation);
+router.get("/:id/receipt", authenticateToken, reservationController.getReservationReceipt);
+router.patch('/:id/mark-notified', authenticateToken, reservationController.markReservationNotified);
 
 // Clerk routes
 router.get("/all", authenticateClerkToken, reservationController.getAllReservations);

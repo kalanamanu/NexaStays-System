@@ -171,6 +171,11 @@ model Reservation {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   billingRecord   BillingRecord?
+
+  // Auto-cancel and notification fields
+  cancelledAt         DateTime?
+  cancellationReason  String?
+  customerNotified    Boolean      @default(false)
 }
 
 model BillingRecord {

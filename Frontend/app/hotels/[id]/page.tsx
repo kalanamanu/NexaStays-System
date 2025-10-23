@@ -168,7 +168,7 @@ export default function HotelDetailsPage({
                       <div className="flex items-center gap-2">
                         <span className="font-medium">{t.type}</span>
                         <span className="ml-2 text-xs bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200 rounded-full px-2 py-0.5">
-                          ${t.price.toFixed(2)} per night
+                          LKR{t.price.toFixed(2)} per night
                         </span>
                       </div>
                       <div className="text-sm text-gray-600 dark:text-gray-300">
@@ -210,7 +210,7 @@ export default function HotelDetailsPage({
                         value={t.type}
                         disabled={t.available < 1}
                       >
-                        {t.type} (${t.price.toFixed(2)}, {t.available}{" "}
+                        {t.type} (LKR{t.price.toFixed(2)}, {t.available}{" "}
                         available)
                       </option>
                     ))}
@@ -247,7 +247,7 @@ export default function HotelDetailsPage({
                     Estimated from
                   </div>
                   <div className="text-3xl font-extrabold text-indigo-600 dark:text-indigo-300">
-                    ${estimatedPrice}
+                    LKR{estimatedPrice}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">
                     * Final price may vary based on selection and availability.
