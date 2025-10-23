@@ -12,7 +12,7 @@ import UserMenu from "@/components/ui/UserMenu";
 
 /**
  * NavBar
- * - For "Travel Company" users: hide main nav links and disable home link
+ * - For "Travel Company" and "Clerk" users: hide main nav links and disable home link
  * - For all others: show normal nav
  *
  * Save this file as: components/nav-bar.tsx
@@ -35,8 +35,9 @@ export default function NavBar() {
     { href: "/contact", label: "Contact Us" },
   ];
 
-  // Check if the user is Travel Company
-  const isTravelCompany = user?.role?.toLowerCase() === "travel-company";
+  // Check if the user is Travel Company or Clerk
+  const userRole = user?.role?.toLowerCase();
+  const hideNav = userRole === "travel-company" || userRole === "clerk";
 
   if (!mounted) return null;
 
@@ -51,7 +52,7 @@ export default function NavBar() {
         <div className="flex items-center h-16 justify-between">
           {/* Left: Brand */}
           <div className="flex items-center flex-1">
-            {isTravelCompany ? (
+            {hideNav ? (
               // Just display the brand, no link
               <span className="text-2xl font-bold bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent select-none cursor-default">
                 Nexa Stays
@@ -66,7 +67,7 @@ export default function NavBar() {
           </div>
 
           {/* Middle: Primary navigation (visible on md+) */}
-          {!isTravelCompany && (
+          {!hideNav && (
             <div className="hidden md:flex items-center justify-center flex-1">
               <div className="flex items-center space-x-4">
                 {primaryNav.map((link) => (
@@ -177,7 +178,7 @@ export default function NavBar() {
                       )}
 
                       {/* Primary nav (mobile) */}
-                      {!isTravelCompany && (
+                      {!hideNav && (
                         <nav className="space-y-2">
                           {primaryNav.map((link) => (
                             <Link

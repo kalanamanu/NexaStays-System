@@ -9,6 +9,13 @@ router.use((req, res, next) => {
     next();
 });
 
+// Clerk routes 
+router.get("/all", authenticateClerkToken, reservationController.getAllReservations);
+router.post("/clerk", authenticateClerkToken, reservationController.createClerkReservation);
+router.post("/walkin", authenticateClerkToken, reservationController.createWalkInReservation);
+router.patch("/checkin", authenticateClerkToken, reservationController.checkinReservation);
+router.post("/checkout", authenticateClerkToken, reservationController.checkoutReservation);
+
 // Customer routes
 router.post("/", authenticateToken, reservationController.createReservation);
 router.post("/residential", authenticateToken, reservationController.createResidentialReservation);
@@ -18,11 +25,5 @@ router.put("/:id", authenticateToken, reservationController.updateReservation);
 router.delete("/:id", authenticateToken, reservationController.deleteReservation);
 router.get("/:id/receipt", authenticateToken, reservationController.getReservationReceipt);
 router.patch('/:id/mark-notified', authenticateToken, reservationController.markReservationNotified);
-
-// Clerk routes
-router.get("/all", authenticateClerkToken, reservationController.getAllReservations);
-router.post("/clerk", authenticateClerkToken, reservationController.createClerkReservation);
-router.patch("/checkin", authenticateClerkToken, reservationController.checkinReservation);
-router.post("/checkout", authenticateClerkToken, reservationController.checkoutReservation);
 
 module.exports = router;

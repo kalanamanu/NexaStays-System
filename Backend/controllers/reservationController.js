@@ -327,7 +327,7 @@ async function createClerkReservation(req, res) {
         guestPhone,
         guestEmail,
         roomType,
-        roomNumber,
+        roomId,
         arrivalDate,
         departureDate,
         guests,
@@ -345,7 +345,7 @@ async function createClerkReservation(req, res) {
         !guests ||
         totalAmount == null ||
         !status ||
-        (status === "checked-in" && !roomNumber)
+        ((status === "checked-in" || status === "reserved") && !roomId)
     ) {
         return res.status(400).json({ error: "All required fields must be filled." });
     }
@@ -356,6 +356,16 @@ async function createClerkReservation(req, res) {
         return res.status(404).json({ error: "Hotel not found." });
     }
 
+    // Get room number for display
+    let roomNumber = null;
+    if (roomId) {
+        const room = await prisma.room.findUnique({
+            where: { id: Number(roomId) },
+            select: { number: true }
+        });
+        roomNumber = room?.number || null;
+    }
+
     try {
         const reservation = await prisma.reservation.create({
             data: {
@@ -364,7 +374,8 @@ async function createClerkReservation(req, res) {
                 guestPhone,
                 guestEmail,
                 roomType,
-                roomNumber: roomNumber || null,
+                roomId: roomId ? Number(roomId) : undefined,
+                roomNumber,
                 arrivalDate: new Date(arrivalDate),
                 departureDate: new Date(departureDate),
                 guests,
@@ -373,10 +384,13 @@ async function createClerkReservation(req, res) {
             },
         });
 
-        if (status === "checked-in" && roomNumber) {
+        // Only update room status if there's a roomId
+        if (roomId) {
+            // If checking in, set room to occupied; if just reserving, set to reserved
+            const roomStatus = status === "checked-in" ? "occupied" : "reserved";
             await prisma.room.update({
-                where: { number: roomNumber },
-                data: { status: "occupied" },
+                where: { id: Number(roomId) },
+                data: { status: roomStatus },
             });
         }
 
@@ -388,20 +402,36 @@ async function createClerkReservation(req, res) {
 }
 
 async function checkinReservation(req, res) {
-    const { reservationId, roomNumber } = req.body;
-    if (!reservationId || !roomNumber) {
-        return res.status(400).json({ error: "Missing fields." });
+    const { reservationId } = req.body;
+    if (!reservationId) {
+        return res.status(400).json({ error: "Missing reservationId." });
     }
     try {
-        const reservation = await prisma.reservation.update({
-            where: { id: reservationId },
-            data: { status: "checked-in", roomNumber },
+        // Get the reservation (with roomId)
+        const reservation = await prisma.reservation.findUnique({
+            where: { id: reservationId }
         });
+
+        if (!reservation) {
+            return res.status(404).json({ error: "Reservation not found." });
+        }
+        if (!reservation.roomId) {
+            return res.status(400).json({ error: "Reservation does not have an assigned room." });
+        }
+
+        // Mark reservation as checked-in
+        const updatedReservation = await prisma.reservation.update({
+            where: { id: reservationId },
+            data: { status: "checked-in" }
+        });
+
+        // Mark the actual room as occupied (by id, not number)
         await prisma.room.update({
-            where: { number: roomNumber },
+            where: { id: reservation.roomId },
             data: { status: "occupied" },
         });
-        res.json({ reservation });
+
+        res.json({ reservation: updatedReservation });
     } catch (err) {
         console.error("checkinReservation error:", err);
         res.status(500).json({ error: err.message });
@@ -418,10 +448,14 @@ async function checkoutReservation(req, res) {
             where: { id: reservationId },
             data: { status: "checked-out", updatedAt: new Date() },
         });
-
-        if (reservation.roomNumber) {
+        if (reservation.roomId) {
             await prisma.room.update({
-                where: { number: reservation.roomNumber },
+                where: { id: reservation.roomId },
+                data: { status: "available" },
+            });
+        } else if (reservation.hotelId && reservation.roomNumber) {
+            await prisma.room.update({
+                where: { hotelId_number: { hotelId: reservation.hotelId, number: reservation.roomNumber } },
                 data: { status: "available" },
             });
         }
@@ -672,11 +706,11 @@ async function getReservationReceipt(req, res) {
             .font("Helvetica-Bold")
             .text("PAYMENT SUMMARY", leftColumn + 15, summaryY + 7);
 
-        // Total amount with emphasis
+        // Total amount with emphasis (LKR)
         doc.fillColor(successColor)
             .fontSize(24)
             .font("Helvetica-Bold")
-            .text(`$${Number(reservation.totalAmount).toLocaleString(undefined, {
+            .text(`LKR ${Number(reservation.totalAmount).toLocaleString(undefined, {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             })}`,
@@ -761,6 +795,113 @@ async function markReservationNotified(req, res) {
     } catch (err) {
         res.status(500).json({ error: "Failed to update notification status." });
     }
+
+    async function getAllReservations(req, res) {
+        try {
+            const reservations = await prisma.reservation.findMany({
+                include: {
+                    hotel: true,
+                },
+                orderBy: { createdAt: "desc" },
+            });
+
+            // Optionally shape the data
+            res.json({
+                reservations: reservations.map(r => ({
+                    id: r.id,
+                    guestName: r.guestName,
+                    guestPhone: r.guestPhone,
+                    guestEmail: r.guestEmail,
+                    hotelId: r.hotelId,
+                    hotelName: r.hotel?.name,
+                    roomType: r.roomType,
+                    roomNumber: r.roomNumber,
+                    arrivalDate: r.arrivalDate,
+                    departureDate: r.departureDate,
+                    status: r.status,
+                    guests: r.guests,
+                    totalAmount: r.totalAmount,
+                    createdAt: r.createdAt,
+                    updatedAt: r.updatedAt,
+                })),
+            });
+        } catch (err) {
+            console.error("getAllReservations error", err);
+            res.status(500).json({ error: "Failed to fetch reservations" });
+        }
+    }
+}
+
+async function createWalkInReservation(req, res) {
+    const {
+        hotelId,
+        guestName,
+        guestPhone,
+        guestEmail,
+        roomType,
+        roomId,
+        arrivalDate,
+        departureDate,
+        guests = 1,
+        status,
+        totalAmount // <-- add this!
+    } = req.body;
+
+    if (
+        !hotelId ||
+        !guestName ||
+        !guestPhone ||
+        !roomType ||
+        !roomId ||
+        !arrivalDate ||
+        !departureDate ||
+        !status ||
+        totalAmount == null // <-- check this as well!
+    ) {
+        return res.status(400).json({ error: "All required fields must be filled." });
+    }
+
+    // Optional: validate hotel exists
+    const hotel = await prisma.hotel.findUnique({ where: { id: Number(hotelId) } });
+    if (!hotel) {
+        return res.status(404).json({ error: "Hotel not found." });
+    }
+
+    try {
+        // Get room number for display
+        const room = await prisma.room.findUnique({
+            where: { id: Number(roomId) },
+            select: { number: true }
+        });
+
+        const reservation = await prisma.reservation.create({
+            data: {
+                hotelId: Number(hotelId),
+                guestName,
+                guestPhone,
+                guestEmail,
+                roomType,
+                roomId: Number(roomId),
+                roomNumber: room?.number || null,
+                arrivalDate: new Date(arrivalDate),
+                departureDate: new Date(departureDate),
+                guests,
+                status,
+                totalAmount
+            },
+        });
+
+        // Mark the room as occupied
+        await prisma.room.update({
+            where: { id: Number(roomId) },
+            data: { status: "occupied" },
+        });
+
+        res.json({ reservation });
+    } catch (err) {
+        console.error("createWalkInReservation error:", err);
+        res.status(500).json({ error: err.message });
+    }
 }
 
 module.exports = {
@@ -775,5 +916,7 @@ module.exports = {
     checkoutReservation,
     getReservationById,
     getReservationReceipt,
-    markReservationNotified
+    markReservationNotified,
+    getAllReservations,
+    createWalkInReservation
 };

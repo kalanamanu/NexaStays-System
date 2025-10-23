@@ -12,6 +12,7 @@ const blockBookingRoutes = require("./routes/blockBookingRoutes");
 const roomRoutes = require("./routes/roomRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
 const hotelsRouter = require("./routes/hotels");
+const clerkReportRoutes = require("./routes/clerkReport");
 
 // Error handlers (404 + general)
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
@@ -30,6 +31,7 @@ app.use("/api/block-bookings", blockBookingRoutes);
 app.use("/api/rooms", roomRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/hotels", hotelsRouter);
+app.use("/api/reports", clerkReportRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
