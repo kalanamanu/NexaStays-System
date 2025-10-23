@@ -14,15 +14,23 @@ import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+// New: room type details
+interface BlockBookingRoomType {
+  id: number | string;
+  roomType: string;
+  rooms: number;
+  // Optionally: price?: number
+}
+
 interface BlockBooking {
   id: number | string;
-  rooms: number;
-  roomType: string;
   arrivalDate: string;
   departureDate: string;
   discountRate: number;
   status: "pending" | "confirmed" | "cancelled";
   totalAmount: number;
+  hotel?: { name: string };
+  roomTypes: BlockBookingRoomType[];
 }
 
 export default function ViewBlockBookingPage() {
@@ -103,6 +111,10 @@ export default function ViewBlockBookingPage() {
     );
   }
 
+  // Compute total rooms
+  const totalRooms =
+    blockBooking.roomTypes?.reduce((sum, rt) => sum + rt.rooms, 0) || 0;
+
   return (
     <div>
       <NavBar />
@@ -125,14 +137,29 @@ export default function ViewBlockBookingPage() {
                 <span className="font-semibold">Booking ID:</span>
                 <span>{`BLK${String(blockBooking.id).padStart(3, "0")}`}</span>
               </div>
+              {blockBooking.hotel?.name && (
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Hotel:</span>
+                  <span>{blockBooking.hotel.name}</span>
+                </div>
+              )}
               <div className="flex items-center gap-2">
-                <span className="font-semibold">Rooms:</span>
-                <span>{blockBooking.rooms}</span>
+                <span className="font-semibold">Total Rooms:</span>
+                <span>{totalRooms}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Room Type:</span>
-                <span>{blockBooking.roomType}</span>
-              </div>
+              {/* Room breakdown */}
+              {blockBooking.roomTypes && blockBooking.roomTypes.length > 0 && (
+                <div>
+                  <span className="font-semibold">Room Details:</span>
+                  <ul className="list-disc ml-6 mt-1">
+                    {blockBooking.roomTypes.map((rt) => (
+                      <li key={rt.roomType}>
+                        {rt.rooms} x {rt.roomType}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <span className="font-semibold">Discount:</span>
                 <span>{blockBooking.discountRate}%</span>
@@ -152,7 +179,7 @@ export default function ViewBlockBookingPage() {
               <div className="flex items-center gap-2">
                 <span className="font-semibold">Total:</span>
                 <span className="font-bold text-green-700 dark:text-green-300">
-                  ${blockBooking.totalAmount.toLocaleString()}
+                  LKR {blockBooking.totalAmount.toLocaleString()}
                 </span>
               </div>
             </div>

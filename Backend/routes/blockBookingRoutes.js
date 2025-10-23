@@ -9,7 +9,6 @@ router.use((req, res, next) => {
     next();
 });
 
-// Routes
 router.post("/", authenticateToken, blockBookingController.createBlockBooking);
 router.get("/", authenticateToken, blockBookingController.getBlockBookings);
 router.get("/:id", authenticateToken, blockBookingController.getBlockBookingById);

@@ -12,33 +12,43 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { CalendarIcon, Loader2, X } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { CalendarIcon, Loader2, X } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
+// Room type model for multi-room-type support
+interface BlockBookingRoomType {
+  id: number | string;
+  roomType: string;
+  rooms: number;
+}
+
+interface RoomFromHotel {
+  id: number | string;
+  type: string;
+  pricePerNight: number;
+}
+
 interface BlockBooking {
   id: number | string;
-  rooms: number;
-  roomType: string;
   arrivalDate: string;
   departureDate: string;
   discountRate: number;
   status: "pending" | "confirmed" | "cancelled";
   totalAmount: number;
+  hotel?: {
+    id: number | string;
+    name: string;
+    rooms: RoomFromHotel[];
+  };
+  roomTypes: BlockBookingRoomType[];
 }
 
 export default function EditBlockBookingPage() {
@@ -50,9 +60,17 @@ export default function EditBlockBookingPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [blockBooking, setBlockBooking] = useState<BlockBooking | null>(null);
 
+  // Each entry: type, label, price, rooms (user input)
+  const [roomTypeSelections, setRoomTypeSelections] = useState<
+    {
+      type: string;
+      label: string;
+      price: number;
+      rooms: number;
+    }[]
+  >([]);
+
   const [formData, setFormData] = useState({
-    rooms: 3,
-    roomType: "",
     arrivalDate: undefined as Date | undefined,
     departureDate: undefined as Date | undefined,
     discountRate: 10,
@@ -75,9 +93,38 @@ export default function EditBlockBookingPage() {
         if (!res.ok) throw new Error("Booking not found");
         const data = await res.json();
         setBlockBooking(data.blockBooking);
+
+        // Deduplicate room types from hotel.rooms, using actual pricePerNight
+        const roomsArr: RoomFromHotel[] = data.blockBooking.hotel?.rooms || [];
+        const typeMap: Record<
+          string,
+          { type: string; label: string; price: number }
+        > = {};
+        roomsArr.forEach((room: RoomFromHotel) => {
+          const typeKey = room.type.trim().toLowerCase();
+          if (!typeMap[typeKey]) {
+            typeMap[typeKey] = {
+              type: typeKey,
+              label: room.type.trim(),
+              price: room.pricePerNight,
+            };
+          }
+        });
+
+        // For each type, fill in the booked count if present
+        const selections = Object.values(typeMap).map((rt) => {
+          const found = data.blockBooking.roomTypes?.find(
+            (r: BlockBookingRoomType) =>
+              r.roomType.trim().toLowerCase() === rt.type
+          );
+          return {
+            ...rt,
+            rooms: found ? found.rooms : 0,
+          };
+        });
+        setRoomTypeSelections(selections);
+
         setFormData({
-          rooms: data.blockBooking.rooms,
-          roomType: data.blockBooking.roomType,
           arrivalDate: new Date(data.blockBooking.arrivalDate),
           departureDate: new Date(data.blockBooking.departureDate),
           discountRate: data.blockBooking.discountRate,
@@ -94,49 +141,16 @@ export default function EditBlockBookingPage() {
       }
     };
     fetchBooking();
+    // eslint-disable-next-line
   }, [id, router, toast]);
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-    if (formData.rooms < 3)
-      newErrors.rooms = "Minimum 3 rooms required for block booking";
-    if (!formData.roomType) newErrors.roomType = "Room type is required";
-    if (!formData.arrivalDate)
-      newErrors.arrivalDate = "Arrival date is required";
-    if (!formData.departureDate)
-      newErrors.departureDate = "Departure date is required";
-    if (formData.discountRate < 0 || formData.discountRate > 50) {
-      newErrors.discountRate = "Discount rate must be between 0% and 50%";
-    }
-    if (
-      formData.arrivalDate &&
-      formData.departureDate &&
-      formData.arrivalDate >= formData.departureDate
-    ) {
-      newErrors.departureDate = "Departure date must be after arrival date";
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const calculateTotal = () => {
-    if (!formData.arrivalDate || !formData.departureDate || !formData.roomType)
-      return 0;
-    const nights = Math.ceil(
-      (formData.departureDate.getTime() - formData.arrivalDate.getTime()) /
-        (1000 * 60 * 60 * 24)
+  const updateRoomTypeCount = (type: string, value: number) => {
+    setRoomTypeSelections((prev) =>
+      prev.map((rt) =>
+        rt.type === type ? { ...rt, rooms: Math.max(0, Math.floor(value)) } : rt
+      )
     );
-    const roomRates = {
-      standard: 120,
-      deluxe: 180,
-      suite: 280,
-      residential: 450,
-    };
-    const baseRate =
-      roomRates[formData.roomType as keyof typeof roomRates] || 0;
-    const totalBeforeDiscount = baseRate * nights * formData.rooms;
-    const discountAmount = totalBeforeDiscount * (formData.discountRate / 100);
-    return totalBeforeDiscount - discountAmount;
+    setErrors((prev) => ({ ...prev, [`roomType_${type}`]: "" }));
   };
 
   const updateFormData = (field: string, value: any) => {
@@ -144,6 +158,62 @@ export default function EditBlockBookingPage() {
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }));
     }
+  };
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+    const totalRooms = roomTypeSelections.reduce((sum, r) => sum + r.rooms, 0);
+    if (totalRooms < 3)
+      newErrors.roomTypeSelections =
+        "Minimum 3 rooms required for block booking";
+    if (!formData.arrivalDate)
+      newErrors.arrivalDate = "Arrival date is required";
+    if (!formData.departureDate)
+      newErrors.departureDate = "Departure date is required";
+    if (formData.discountRate < 0)
+      newErrors.discountRate = "Discount rate cannot be negative";
+    if (formData.discountRate > 50)
+      newErrors.discountRate = "Discount rate must not exceed 50%";
+    if (
+      formData.arrivalDate &&
+      formData.departureDate &&
+      formData.arrivalDate >= formData.departureDate
+    ) {
+      newErrors.departureDate = "Departure date must be after arrival date";
+    }
+    // No negative or non-integer rooms
+    for (const rt of roomTypeSelections) {
+      if (rt.rooms < 0) newErrors[`roomType_${rt.type}`] = "Cannot be negative";
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const calculateTotal = () => {
+    if (!formData.arrivalDate || !formData.departureDate) return 0;
+    const nights = Math.ceil(
+      (formData.departureDate.getTime() - formData.arrivalDate.getTime()) /
+        (1000 * 60 * 60 * 24)
+    );
+    let total = 0;
+    for (const rt of roomTypeSelections) {
+      total += rt.rooms * rt.price * nights;
+    }
+    const discountAmount = total * (formData.discountRate / 100);
+    return total - discountAmount;
+  };
+
+  const calculateTotalBeforeDiscount = () => {
+    if (!formData.arrivalDate || !formData.departureDate) return 0;
+    const nights = Math.ceil(
+      (formData.departureDate.getTime() - formData.arrivalDate.getTime()) /
+        (1000 * 60 * 60 * 24)
+    );
+    let total = 0;
+    for (const rt of roomTypeSelections) {
+      total += rt.rooms * rt.price * nights;
+    }
+    return total;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -160,8 +230,10 @@ export default function EditBlockBookingPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          rooms: formData.rooms,
-          roomType: formData.roomType,
+          hotelId: blockBooking?.hotel?.id, // <-- ADD THIS LINE
+          roomTypes: roomTypeSelections
+            .filter((r) => r.rooms > 0)
+            .map((r) => ({ roomType: r.type, rooms: r.rooms })),
           arrivalDate: formData.arrivalDate?.toISOString(),
           departureDate: formData.departureDate?.toISOString(),
           discountRate: formData.discountRate,
@@ -196,6 +268,8 @@ export default function EditBlockBookingPage() {
     );
   }
 
+  const totalRooms = roomTypeSelections.reduce((sum, r) => sum + r.rooms, 0);
+
   return (
     <div>
       <NavBar />
@@ -212,55 +286,57 @@ export default function EditBlockBookingPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="rooms">Number of Rooms *</Label>
-                  <Input
-                    id="rooms"
-                    type="number"
-                    min="3"
-                    value={formData.rooms}
-                    onChange={(e) =>
-                      updateFormData(
-                        "rooms",
-                        Number.parseInt(e.target.value) || 3
-                      )
-                    }
-                    className={cn(errors.rooms && "border-red-500")}
-                  />
-                  {errors.rooms && (
-                    <p className="text-sm text-red-500">{errors.rooms}</p>
-                  )}
+              {/* Room Type/Count Section */}
+              <div className="space-y-2">
+                <Label>Room Types and Counts *</Label>
+                <div className="space-y-3">
+                  {roomTypeSelections.map((rt) => (
+                    <div key={rt.type} className="flex items-center gap-3">
+                      <span className="min-w-[120px] font-medium">
+                        {rt.label}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        (LKR {rt.price}/night)
+                      </span>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={rt.rooms}
+                        onChange={(e) =>
+                          updateRoomTypeCount(
+                            rt.type,
+                            Math.max(0, Number(e.target.value))
+                          )
+                        }
+                        className={cn(
+                          "w-24",
+                          errors[`roomType_${rt.type}`] && "border-red-500"
+                        )}
+                        placeholder="Rooms"
+                      />
+                      <span className="text-xs text-gray-500">rooms</span>
+                      {errors[`roomType_${rt.type}`] && (
+                        <span className="text-xs text-red-500 ml-2">
+                          {errors[`roomType_${rt.type}`]}
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="roomType">Room Type *</Label>
-                  <Select
-                    value={formData.roomType}
-                    onValueChange={(value) => updateFormData("roomType", value)}
-                  >
-                    <SelectTrigger
-                      className={cn(errors.roomType && "border-red-500")}
-                    >
-                      <SelectValue placeholder="Select room type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="standard">
-                        Standard - $120/night
-                      </SelectItem>
-                      <SelectItem value="deluxe">
-                        Deluxe - $180/night
-                      </SelectItem>
-                      <SelectItem value="suite">Suite - $280/night</SelectItem>
-                      <SelectItem value="residential">
-                        Residential Suite - $450/night
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {errors.roomType && (
-                    <p className="text-sm text-red-500">{errors.roomType}</p>
-                  )}
+                {errors.roomTypeSelections && (
+                  <p className="text-sm text-red-500">
+                    {errors.roomTypeSelections}
+                  </p>
+                )}
+                <p className="text-xs text-gray-500">
+                  Minimum 3 rooms required in total for block booking.
+                </p>
+                <div className="flex gap-2 mt-2">
+                  <span className="font-semibold">Total Rooms:</span>
+                  <span>{totalRooms}</span>
                 </div>
               </div>
+              {/* Dates and Discount */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Arrival Date *</Label>
@@ -347,7 +423,7 @@ export default function EditBlockBookingPage() {
                   onChange={(e) =>
                     updateFormData(
                       "discountRate",
-                      Number.parseInt(e.target.value) || 0
+                      Math.max(0, Math.min(50, Number(e.target.value) || 0))
                     )
                   }
                   className={cn(errors.discountRate && "border-red-500")}
@@ -356,20 +432,78 @@ export default function EditBlockBookingPage() {
                   <p className="text-sm text-red-500">{errors.discountRate}</p>
                 )}
                 <p className="text-sm text-gray-500">
-                  Negotiated discount rate for bulk booking
+                  Negotiated discount rate for bulk booking (max 50%)
                 </p>
               </div>
               {formData.arrivalDate &&
                 formData.departureDate &&
-                formData.roomType && (
+                totalRooms > 0 && (
                   <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
                     <h4 className="font-semibold text-purple-700 dark:text-purple-300 mb-2">
                       Booking Summary
                     </h4>
                     <div className="space-y-1 text-sm">
+                      {roomTypeSelections.map(
+                        (sel) =>
+                          sel.rooms > 0 && (
+                            <div
+                              key={sel.type}
+                              className="flex justify-between items-center"
+                            >
+                              <span>
+                                {sel.label} x {sel.rooms} room
+                                {sel.rooms > 1 ? "s" : ""} @ LKR {sel.price}
+                              </span>
+                              <span className="flex flex-col items-end">
+                                {formData.discountRate > 0 ? (
+                                  <>
+                                    <span className="line-through text-gray-400">
+                                      LKR
+                                      {(
+                                        sel.price *
+                                        sel.rooms *
+                                        Math.ceil(
+                                          (formData.departureDate!.getTime() -
+                                            formData.arrivalDate!.getTime()) /
+                                            (1000 * 60 * 60 * 24)
+                                        )
+                                      ).toLocaleString()}
+                                    </span>
+                                    <span className="font-semibold text-purple-700">
+                                      LKR
+                                      {(
+                                        sel.price *
+                                        sel.rooms *
+                                        Math.ceil(
+                                          (formData.departureDate!.getTime() -
+                                            formData.arrivalDate!.getTime()) /
+                                            (1000 * 60 * 60 * 24)
+                                        ) *
+                                        (1 - formData.discountRate / 100)
+                                      ).toLocaleString()}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="font-semibold">
+                                    LKR
+                                    {(
+                                      sel.price *
+                                      sel.rooms *
+                                      Math.ceil(
+                                        (formData.departureDate!.getTime() -
+                                          formData.arrivalDate!.getTime()) /
+                                          (1000 * 60 * 60 * 24)
+                                      )
+                                    ).toLocaleString()}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          )
+                      )}
                       <div className="flex justify-between">
-                        <span>Rooms:</span>
-                        <span>{formData.rooms}</span>
+                        <span>Total Rooms:</span>
+                        <span>{totalRooms}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Nights:</span>
@@ -387,7 +521,15 @@ export default function EditBlockBookingPage() {
                       </div>
                       <div className="flex justify-between font-semibold text-lg pt-2 border-t">
                         <span>Total:</span>
-                        <span>${calculateTotal().toLocaleString()}</span>
+                        <span>
+                          {formData.discountRate > 0 && (
+                            <span className="line-through text-gray-400 mr-2">
+                              LKR{" "}
+                              {calculateTotalBeforeDiscount().toLocaleString()}
+                            </span>
+                          )}
+                          <span>LKR {calculateTotal().toLocaleString()}</span>
+                        </span>
                       </div>
                     </div>
                   </div>

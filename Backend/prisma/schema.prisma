@@ -15,7 +15,7 @@ datasource db {
   - Hotel.reviews field
 
   After saving this file run the migration and regenerate the client:
-    npx prisma migrate dev --name add-hotel-starting-price
+    npx prisma migrate dev --name add-hotel-id-to-block-booking
     npx prisma generate
 */
 
@@ -62,14 +62,26 @@ model BlockBooking {
   id              Int                  @id @default(autoincrement())
   travelCompany   TravelCompanyProfile @relation(fields: [travelCompanyId], references: [id])
   travelCompanyId Int
-  rooms           Int
-  roomType        String
+
+  hotel           Hotel?               @relation(fields: [hotelId], references: [id])
+  hotelId         Int?
+
+  roomTypes       BlockBookingRoomType[] // <-- NEW
+
   arrivalDate     DateTime
   departureDate   DateTime
   discountRate    Float
   totalAmount     Float
   status          String
   createdAt       DateTime             @default(now())
+}
+
+model BlockBookingRoomType {
+  id            Int          @id @default(autoincrement())
+  blockBooking  BlockBooking @relation(fields: [blockBookingId], references: [id])
+  blockBookingId Int
+  roomType      String
+  rooms         Int
 }
 
 /*
@@ -114,6 +126,8 @@ model Hotel {
 
   rooms           Room[]
   reservations    Reservation[]
+  blockBookings   BlockBooking[]  // NEW: reverse relation
+
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 

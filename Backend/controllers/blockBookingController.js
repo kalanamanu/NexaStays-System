@@ -1,45 +1,57 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-/**
- * Controller for Block Bookings
- * Exports: createBlockBooking, getBlockBookings, updateBlockBooking, deleteBlockBooking
- *
- * Note: routes should apply authenticateToken middleware before these handlers.
- */
-
 async function createBlockBooking(req, res) {
     try {
         if (!req.user || req.user.role !== "travel-company") {
             return res.status(403).json({ error: "Unauthorized" });
         }
-
-        const { rooms, roomType, arrivalDate, departureDate, discountRate, totalAmount } = req.body;
+        const { hotelId, roomTypes, arrivalDate, departureDate, discountRate, totalAmount } = req.body;
         const travelCompanyId = req.user.travelCompanyProfileId;
 
         if (!travelCompanyId) {
-            console.error("Block Booking POST: Missing travelCompanyProfileId in req.user:", req.user);
             return res.status(400).json({ error: "Missing travel company profile. Please contact support." });
         }
-
-        if (!rooms || !roomType || !arrivalDate || !departureDate || discountRate == null || totalAmount == null) {
+        if (!hotelId) {
+            return res.status(400).json({ error: "Missing hotel." });
+        }
+        if (!Array.isArray(roomTypes) || roomTypes.length === 0) {
+            return res.status(400).json({ error: "At least one room type must be selected." });
+        }
+        if (!arrivalDate || !departureDate || discountRate == null || totalAmount == null) {
             return res.status(400).json({ error: "Missing required fields." });
+        }
+        // Validate all roomTypes
+        let totalRooms = 0;
+        for (const rt of roomTypes) {
+            if (!rt.roomType || typeof rt.rooms !== "number" || rt.rooms < 1) {
+                return res.status(400).json({ error: "All roomTypes must have a roomType and at least 1 room." });
+            }
+            totalRooms += rt.rooms;
+        }
+        if (totalRooms < 3) {
+            return res.status(400).json({ error: "Block booking must be for at least 3 rooms total." });
         }
 
         const blockBooking = await prisma.blockBooking.create({
             data: {
                 travelCompanyId,
-                rooms,
-                roomType,
+                hotelId: Number(hotelId),
                 arrivalDate: new Date(arrivalDate),
                 departureDate: new Date(departureDate),
                 discountRate,
                 totalAmount,
                 status: "pending",
+                roomTypes: {
+                    create: roomTypes.map(rt => ({
+                        roomType: rt.roomType,
+                        rooms: rt.rooms,
+                    })),
+                }
             },
+            include: { roomTypes: true }
         });
 
-        console.log("Block Booking Created:", blockBooking);
         res.json({ blockBooking });
     } catch (err) {
         console.error("Block booking create error:", err);
@@ -55,13 +67,13 @@ async function getBlockBookings(req, res) {
 
         const travelCompanyId = req.user.travelCompanyProfileId;
         if (!travelCompanyId) {
-            console.error("Block Booking GET: Missing travelCompanyProfileId in req.user:", req.user);
             return res.status(400).json({ error: "Missing travel company profile. Please contact support." });
         }
 
         const blockBookings = await prisma.blockBooking.findMany({
             where: { travelCompanyId },
             orderBy: { createdAt: "desc" },
+            include: { roomTypes: true, hotel: true },
         });
 
         res.json({ blockBookings });
@@ -78,16 +90,26 @@ async function updateBlockBooking(req, res) {
         }
 
         const { id } = req.params;
-        const { rooms, roomType, arrivalDate, departureDate, discountRate, totalAmount } = req.body;
+        const { hotelId, roomTypes, arrivalDate, departureDate, discountRate, totalAmount } = req.body;
         const travelCompanyId = req.user.travelCompanyProfileId;
 
         if (!travelCompanyId) {
-            console.error("Block Booking PUT: Missing travelCompanyProfileId in req.user:", req.user);
             return res.status(400).json({ error: "Missing travel company profile. Please contact support." });
         }
 
-        if (!rooms || !roomType || !arrivalDate || !departureDate || discountRate == null || totalAmount == null) {
+        if (!hotelId || !Array.isArray(roomTypes) || roomTypes.length === 0 || !arrivalDate || !departureDate || discountRate == null || totalAmount == null) {
             return res.status(400).json({ error: "Missing required fields." });
+        }
+
+        let totalRooms = 0;
+        for (const rt of roomTypes) {
+            if (!rt.roomType || typeof rt.rooms !== "number" || rt.rooms < 1) {
+                return res.status(400).json({ error: "All roomTypes must have a roomType and at least 1 room." });
+            }
+            totalRooms += rt.rooms;
+        }
+        if (totalRooms < 3) {
+            return res.status(400).json({ error: "Block booking must be for at least 3 rooms total." });
         }
 
         const existing = await prisma.blockBooking.findFirst({
@@ -100,11 +122,11 @@ async function updateBlockBooking(req, res) {
             return res.status(404).json({ error: "Block booking not found." });
         }
 
+        // Update main block booking
         const blockBooking = await prisma.blockBooking.update({
             where: { id: Number(id) },
             data: {
-                rooms,
-                roomType,
+                hotelId: Number(hotelId),
                 arrivalDate: new Date(arrivalDate),
                 departureDate: new Date(departureDate),
                 discountRate,
@@ -112,7 +134,25 @@ async function updateBlockBooking(req, res) {
             },
         });
 
-        res.json({ blockBooking });
+        // Remove previous room types and add new ones
+        await prisma.blockBookingRoomType.deleteMany({
+            where: { blockBookingId: blockBooking.id }
+        });
+        await prisma.blockBookingRoomType.createMany({
+            data: roomTypes.map(rt => ({
+                blockBookingId: blockBooking.id,
+                roomType: rt.roomType,
+                rooms: rt.rooms,
+            })),
+        });
+
+        // Return updated with new roomTypes
+        const updated = await prisma.blockBooking.findUnique({
+            where: { id: blockBooking.id },
+            include: { roomTypes: true, hotel: true }
+        });
+
+        res.json({ blockBooking: updated });
     } catch (err) {
         console.error("Block booking update error:", err);
         res.status(500).json({ error: err.message });
@@ -129,7 +169,6 @@ async function deleteBlockBooking(req, res) {
         const travelCompanyId = req.user.travelCompanyProfileId;
 
         if (!travelCompanyId) {
-            console.error("Block Booking DELETE: Missing travelCompanyProfileId in req.user:", req.user);
             return res.status(400).json({ error: "Missing travel company profile. Please contact support." });
         }
 
@@ -142,6 +181,11 @@ async function deleteBlockBooking(req, res) {
         if (!existing) {
             return res.status(404).json({ error: "Block booking not found." });
         }
+
+        // Delete all related roomTypes first due to FK constraint
+        await prisma.blockBookingRoomType.deleteMany({
+            where: { blockBookingId: Number(id) }
+        });
 
         await prisma.blockBooking.delete({
             where: { id: Number(id) },
@@ -175,6 +219,14 @@ async function getBlockBookingById(req, res) {
             where: {
                 id: Number(id),
                 travelCompanyId,
+            },
+            include: {
+                roomTypes: true,
+                hotel: {
+                    include: {
+                        rooms: true,
+                    },
+                },
             },
         });
 
