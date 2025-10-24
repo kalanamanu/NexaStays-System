@@ -413,6 +413,98 @@ async function rejectTravelCompanyBlockBooking(req, res) {
         res.status(500).json({ error: "Failed to reject block booking." });
     }
 }
+
+
+/**
+ * GET /api/manager/get-all-reservations
+ * Returns all reservations for hotels managed by the manager.
+ * If you want to filter by manager, use req.user.id (from JWT) and the hotel.travelCompanyId.
+ */
+async function getAllReservationsManager(req, res) {
+    try {
+        const reservations = await prisma.reservation.findMany({
+            include: {
+                customer: true,
+                room: true,
+                hotel: true,
+            },
+            orderBy: { createdAt: "desc" },
+        });
+
+        res.json({ reservations });
+    } catch (err) {
+        console.error("getAllReservationsManager error:", err);
+        res.status(500).json({ error: "Failed to fetch all reservations for manager." });
+    }
+}
+
+
+/**
+ * GET /api/manager/reports/travel-company-revenue
+ * Query params:
+ *   - hotelId (optional): filter by hotel
+ *   - from, to (optional): filter by date range (arrivalDate)
+ */
+async function getTravelCompanyBookingsRevenue(req, res) {
+    const { hotelId, from, to } = req.query;
+
+    // Build query filters
+    const filters = {
+        status: "reserved",
+    };
+    if (hotelId) filters.hotelId = Number(hotelId);
+    if (from) filters.arrivalDate = { ...(filters.arrivalDate || {}), gte: new Date(from) };
+    if (to) filters.arrivalDate = { ...(filters.arrivalDate || {}), lte: new Date(to) };
+
+    try {
+        // Get all reserved block bookings with travel company and hotel info
+        const bookings = await prisma.blockBooking.findMany({
+            where: filters,
+            include: {
+                travelCompany: { select: { id: true, companyName: true } },
+                hotel: { select: { id: true, name: true } },
+            },
+        });
+
+        // Total revenue
+        const totalRevenue = bookings.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+
+        // Revenue per travel company
+        const companyMap = new Map();
+        bookings.forEach(b => {
+            if (!b.travelCompany) return;
+            const key = b.travelCompany.id;
+            if (!companyMap.has(key)) {
+                companyMap.set(key, { companyId: key, companyName: b.travelCompany.companyName, revenue: 0 });
+            }
+            companyMap.get(key).revenue += b.totalAmount || 0;
+        });
+        const perCompany = Array.from(companyMap.values());
+
+        // Revenue per hotel (optional)
+        const hotelMap = new Map();
+        bookings.forEach(b => {
+            if (!b.hotel) return;
+            const key = b.hotel.id;
+            if (!hotelMap.has(key)) {
+                hotelMap.set(key, { hotelId: key, hotelName: b.hotel.name, revenue: 0 });
+            }
+            hotelMap.get(key).revenue += b.totalAmount || 0;
+        });
+        const perHotel = Array.from(hotelMap.values());
+
+        res.json({
+            totalRevenue,
+            perCompany,
+            perHotel,
+        });
+    } catch (err) {
+        console.error("getTravelCompanyBookingsRevenue error:", err);
+        res.status(500).json({ error: "Failed to fetch travel company bookings revenue." });
+    }
+}
+
+
 module.exports = {
     getManagerOccupancyReport,
     getManagerRevenueReport,
@@ -420,5 +512,7 @@ module.exports = {
     getManagerSuiteReport,
     getTravelCompanyBlockBookings,
     approveTravelCompanyBlockBooking,
-    rejectTravelCompanyBlockBooking
+    rejectTravelCompanyBlockBooking,
+    getAllReservationsManager,
+    getTravelCompanyBookingsRevenue
 };

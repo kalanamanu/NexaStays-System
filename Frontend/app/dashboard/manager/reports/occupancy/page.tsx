@@ -2,7 +2,13 @@
 import { useEffect, useState } from "react";
 import NavBar from "@/components/nav-bar";
 import ManagerSidebar from "@/components/ui/ManagerSidebar";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardDescription,
+} from "@/components/ui/card";
 import {
   Select,
   SelectTrigger,
@@ -12,10 +18,22 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   DownloadCloud,
   Calendar as CalendarIcon,
-  BarChart2,
+  BarChart3,
+  Building,
+  TrendingUp,
+  Target,
+  Users,
+  Bed,
+  PieChart,
+  Filter,
+  Eye,
+  AlertTriangle,
 } from "lucide-react";
 import { Line } from "react-chartjs-2";
 import {
@@ -27,6 +45,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
 } from "chart.js";
 
 ChartJS.register(
@@ -36,7 +55,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 interface Hotel {
@@ -63,33 +83,33 @@ function getDefaultDates() {
   };
 }
 
-function exportCsv(report: OccupancyDay[], hotelName: string) {
-  if (!report.length) return;
-  const header = [
-    "Date",
-    "Rooms Occupied",
-    "Rooms Available",
-    "Occupancy Rate (%)",
-  ];
-  const rows = report.map((r) => [
-    r.date,
-    r.roomsOccupied,
-    r.roomsAvailable,
-    r.occupancyRate.toFixed(1),
-  ]);
-  const csvContent = [header, ...rows]
-    .map((row) =>
-      row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")
-    )
-    .join("\r\n");
+function formatDate(dateString: string) {
+  return new Date(dateString).toLocaleDateString("en-US", {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function exportToCsv(data: any[], filename: string) {
+  if (!data.length) return;
+
+  const headers = Object.keys(data[0]);
+  const csvContent = [
+    headers.join(","),
+    ...data.map((row) =>
+      headers
+        .map((header) => `"${String(row[header] || "").replace(/"/g, '""')}"`)
+        .join(",")
+    ),
+  ].join("\r\n");
+
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `Occupancy_Report_${hotelName || "Hotel"}.csv`;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${filename}_${new Date().toISOString().split("T")[0]}.csv`;
+  link.click();
 }
 
 export default function ManagerOccupancyReportPage() {
@@ -156,265 +176,644 @@ export default function ManagerOccupancyReportPage() {
   const maxOccupancy = Math.max(...report.map((row) => row.occupancyRate), 0);
   const minOccupancy = Math.min(...report.map((row) => row.occupancyRate), 100);
 
+  // Additional metrics
+  const totalRoomsAvailable = report.reduce(
+    (sum, row) => sum + row.roomsAvailable,
+    0
+  );
+  const totalRoomsOccupied = report.reduce(
+    (sum, row) => sum + row.roomsOccupied,
+    0
+  );
+  const peakOccupancyDay = report.find(
+    (row) => row.occupancyRate === maxOccupancy
+  );
+  const lowOccupancyDay = report.find(
+    (row) => row.occupancyRate === minOccupancy
+  );
+
+  // Performance metrics
+  const highOccupancyDays = report.filter(
+    (row) => row.occupancyRate >= 90
+  ).length;
+  const lowOccupancyDays = report.filter(
+    (row) => row.occupancyRate <= 30
+  ).length;
+  const performanceRate =
+    totalDays > 0 ? (highOccupancyDays / totalDays) * 100 : 0;
+
   // Chart Data
   const chartData = {
-    labels: report.map((r) => r.date),
+    labels: report.map((r) => {
+      const date = new Date(r.date);
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+    }),
     datasets: [
       {
         label: "Occupancy Rate (%)",
         data: report.map((r) => r.occupancyRate),
         borderColor: "#2563eb",
         backgroundColor: "rgba(37, 99, 235, 0.1)",
-        pointRadius: 2,
-        tension: 0.3,
+        pointBackgroundColor: "#2563eb",
+        pointBorderColor: "#ffffff",
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: 0.4,
+        fill: true,
       },
     ],
   };
 
   const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
     plugins: {
-      legend: { display: false },
-      title: { display: false },
-      tooltip: { enabled: true },
+      legend: {
+        display: false,
+      },
+      title: {
+        display: true,
+        text: "Daily Occupancy Trend",
+        font: {
+          size: 16,
+          weight: "bold" as "bold",
+        },
+        padding: 20,
+      },
+      tooltip: {
+        backgroundColor: "rgba(0, 0, 0, 0.8)",
+        titleFont: { size: 14 },
+        bodyFont: { size: 14 },
+        padding: 12,
+        displayColors: false,
+        callbacks: {
+          label: function (context: any) {
+            return `Occupancy: ${context.parsed.y.toFixed(1)}%`;
+          },
+        },
+      },
     },
     scales: {
-      y: { min: 0, max: 100 },
+      y: {
+        min: 0,
+        max: 100,
+        grid: {
+          color: "rgba(0, 0, 0, 0.1)",
+        },
+        ticks: {
+          callback: function (value: any) {
+            return value + "%";
+          },
+        },
+      },
+      x: {
+        grid: {
+          display: false,
+        },
+      },
     },
   };
 
+  const getOccupancyLevel = (rate: number) => {
+    if (rate >= 90)
+      return {
+        color: "text-green-700",
+        bg: "bg-green-50",
+        badge: "bg-green-100 text-green-800",
+      };
+    if (rate >= 70)
+      return {
+        color: "text-blue-700",
+        bg: "bg-blue-50",
+        badge: "bg-blue-100 text-blue-800",
+      };
+    if (rate >= 50)
+      return {
+        color: "text-yellow-700",
+        bg: "bg-yellow-50",
+        badge: "bg-yellow-100 text-yellow-800",
+      };
+    if (rate >= 30)
+      return {
+        color: "text-orange-700",
+        bg: "bg-orange-50",
+        badge: "bg-orange-100 text-orange-800",
+      };
+    return {
+      color: "text-red-700",
+      bg: "bg-red-50",
+      badge: "bg-red-100 text-red-800",
+    };
+  };
+
+  const handleExportData = () => {
+    const exportData = report.map((day) => ({
+      Date: day.date,
+      RoomsOccupied: day.roomsOccupied,
+      RoomsAvailable: day.roomsAvailable,
+      OccupancyRate: `${day.occupancyRate.toFixed(1)}%`,
+      Performance:
+        day.occupancyRate >= 90
+          ? "High"
+          : day.occupancyRate >= 70
+          ? "Good"
+          : day.occupancyRate >= 50
+          ? "Moderate"
+          : day.occupancyRate >= 30
+          ? "Low"
+          : "Very Low",
+    }));
+    exportToCsv(exportData, `Occupancy_Report_${hotelName}`);
+  };
+
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
       <NavBar />
       <ManagerSidebar />
-      <main className="ml-60 pt-16 min-h-screen overflow-y-auto">
-        <div className="max-w-5xl mx-auto py-8 px-4">
-          <Card className="shadow-lg">
-            <CardHeader>
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart2 className="h-6 w-6 text-blue-700" />
-                    Occupancy Report
-                  </CardTitle>
-                  <div className="text-gray-500 text-sm mt-1">
-                    View occupancy projections, charts, and export daily stats.
+
+      <main className="ml-60 pt-16 min-h-screen">
+        <div className="py-8 px-6 lg:px-8 max-w-7xl mx-auto">
+          {/* Header Section */}
+          <div className="mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                  Occupancy Analytics
+                </h1>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Comprehensive occupancy analysis and performance metrics
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Controls Section */}
+          <Card className="shadow-lg border-0 mb-8">
+            <CardContent className="p-6">
+              <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center">
+                <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <Building className="h-4 w-4" />
+                      Select Hotel
+                    </Label>
+                    <Select
+                      value={String(selectedHotel)}
+                      onValueChange={setSelectedHotel}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Choose a hotel..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {hotels.map((h) => (
+                          <SelectItem key={h.id} value={String(h.id)}>
+                            {h.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-                <div className="flex flex-col md:flex-row gap-2 mt-4 md:mt-0">
-                  <Select
-                    value={String(selectedHotel)}
-                    onValueChange={setSelectedHotel}
-                  >
-                    <SelectTrigger className="min-w-[220px] border-blue-400">
-                      <SelectValue placeholder="Select Hotel" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {hotels.map((h) => (
-                        <SelectItem key={h.id} value={String(h.id)}>
-                          {h.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="flex gap-2 items-center">
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <label className="flex items-center gap-1 text-xs">
-                        <CalendarIcon className="w-3 h-3" />
-                        From
-                        <input
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium flex items-center gap-2">
+                      <Filter className="h-4 w-4" />
+                      Date Range
+                    </Label>
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <Input
                           type="date"
-                          className="rounded border px-1 py-0.5 text-xs"
                           value={from}
                           max={to}
                           onChange={(e) => setFrom(e.target.value)}
+                          className="w-full"
                         />
-                      </label>
-                      <label className="flex items-center gap-1 text-xs">
-                        <CalendarIcon className="w-3 h-3" />
-                        To
-                        <input
+                      </div>
+                      <div className="flex-1">
+                        <Input
                           type="date"
-                          className="rounded border px-1 py-0.5 text-xs"
                           value={to}
                           min={from}
                           onChange={(e) => setTo(e.target.value)}
+                          className="w-full"
                         />
-                      </label>
+                      </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-blue-500 shadow ml-2"
-                      disabled={!report.length}
-                      onClick={() => exportCsv(report, hotelName)}
-                    >
-                      <DownloadCloud className="w-4 h-4 mr-2" />
-                      Export CSV
-                    </Button>
                   </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                    disabled={!report.length}
+                    onClick={handleExportData}
+                  >
+                    <DownloadCloud className="h-4 w-4 mr-2" />
+                    Export CSV
+                  </Button>
                 </div>
               </div>
-            </CardHeader>
-            <Separator />
-            <CardContent>
-              {!selectedHotel && (
-                <div className="text-gray-500 text-center py-12">
-                  Select a hotel to view report.
+            </CardContent>
+          </Card>
+
+          {!selectedHotel && (
+            <Card className="shadow-lg border-0">
+              <CardContent className="py-16 text-center">
+                <BarChart3 className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  Select a Hotel
+                </h3>
+                <p className="text-gray-500 max-w-md mx-auto">
+                  Choose a hotel from the dropdown above to view detailed
+                  occupancy analytics and performance reports.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {loading && (
+            <Card className="shadow-lg border-0">
+              <CardContent className="py-16 text-center">
+                <div className="animate-pulse">
+                  <BarChart3 className="h-16 w-16 text-blue-300 mx-auto mb-4" />
+                  <p className="text-gray-600">
+                    Loading occupancy analytics...
+                  </p>
                 </div>
-              )}
-              {loading && (
-                <div className="text-center py-8 animate-pulse">
-                  Loading report...
-                </div>
-              )}
-              {selectedHotel && !loading && (
-                <div>
-                  {/* Summary Section */}
-                  <div className="flex flex-col md:flex-row gap-6 md:gap-12 mb-6 text-center md:text-left">
-                    <div>
-                      <div className="text-xs uppercase text-gray-500">
-                        Total Days
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedHotel && !loading && report.length > 0 && (
+            <>
+              {/* Key Performance Indicators */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <Card className="bg-white/80 backdrop-blur-sm border-l-4 border-l-blue-500 shadow-lg">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">
+                          Average Occupancy
+                        </p>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {avgOccupancy.toFixed(1)}%
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Period average
+                        </p>
                       </div>
-                      <div className="text-2xl font-bold">{totalDays}</div>
+                      <div className="p-3 bg-blue-100 rounded-lg">
+                        <Target className="h-6 w-6 text-blue-600" />
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-xs uppercase text-gray-500">
-                        Avg. Occupancy
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white/80 backdrop-blur-sm border-l-4 border-l-green-500 shadow-lg">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">
+                          Peak Performance
+                        </p>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {maxOccupancy.toFixed(1)}%
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Highest occupancy
+                        </p>
                       </div>
-                      <div className="text-2xl font-bold text-blue-700">
+                      <div className="p-3 bg-green-100 rounded-lg">
+                        <TrendingUp className="h-6 w-6 text-green-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white/80 backdrop-blur-sm border-l-4 border-l-purple-500 shadow-lg">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">
+                          Room Utilization
+                        </p>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {totalRoomsOccupied}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Total rooms occupied
+                        </p>
+                      </div>
+                      <div className="p-3 bg-purple-100 rounded-lg">
+                        <Bed className="h-6 w-6 text-purple-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-white/80 backdrop-blur-sm border-l-4 border-l-amber-500 shadow-lg">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">
+                          Performance Rate
+                        </p>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {performanceRate.toFixed(1)}%
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          High occupancy days
+                        </p>
+                      </div>
+                      <div className="p-3 bg-amber-100 rounded-lg">
+                        <Users className="h-6 w-6 text-amber-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Performance Range Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+                  <CardContent className="p-6">
+                    <div className="text-center">
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <TrendingUp className="h-5 w-5 text-green-600" />
+                        <div className="text-sm font-medium text-green-800">
+                          Peak Occupancy Day
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold text-green-900">
+                        {maxOccupancy.toFixed(1)}%
+                      </div>
+                      {peakOccupancyDay && (
+                        <div className="text-xs text-green-600 mt-1">
+                          {formatDate(peakOccupancyDay.date)}
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+                  <CardContent className="p-6">
+                    <div className="text-center">
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <Target className="h-5 w-5 text-blue-600" />
+                        <div className="text-sm font-medium text-blue-800">
+                          Average Performance
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold text-blue-900">
                         {avgOccupancy.toFixed(1)}%
                       </div>
-                    </div>
-                    <div>
-                      <div className="text-xs uppercase text-gray-500">
-                        Max/Min Occupancy
-                      </div>
-                      <div className="text-2xl font-bold">
-                        <span className="text-green-600">
-                          {maxOccupancy.toFixed(1)}%
-                        </span>
-                        <span className="mx-1">/</span>
-                        <span className="text-red-500">
-                          {minOccupancy.toFixed(1)}%
-                        </span>
+                      <div className="text-xs text-blue-600 mt-1">
+                        {totalDays} day period
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200">
+                  <CardContent className="p-6">
+                    <div className="text-center">
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <AlertTriangle className="h-5 w-5 text-red-600" />
+                        <div className="text-sm font-medium text-red-800">
+                          Low Occupancy Days
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold text-red-900">
+                        {lowOccupancyDays}
+                      </div>
+                      <div className="text-xs text-red-600 mt-1">
+                        Needs attention
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Chart Section */}
+              <Card className="shadow-lg border-0 mb-8">
+                <CardHeader className="border-b border-gray-200 pb-4">
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <BarChart3 className="h-5 w-5 text-blue-600" />
+                    Occupancy Trend Analysis
+                  </CardTitle>
+                  <CardDescription>
+                    Daily occupancy rates from {formatDate(from)} to{" "}
+                    {formatDate(to)}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="h-80">
+                    <Line data={chartData} options={chartOptions} />
                   </div>
-                  {/* Chart Section */}
-                  <div className="mb-8">
-                    <Line data={chartData} options={chartOptions} height={90} />
-                  </div>
-                  {/* Room Type Breakdown */}
-                  {roomTypes && Object.keys(roomTypes).length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="font-semibold text-blue-900 mb-2">
-                        Room Category Breakdown
-                      </h3>
-                      <table className="min-w-full text-sm border">
-                        <thead className="bg-blue-50">
+                </CardContent>
+              </Card>
+
+              {/* Room Type Breakdown */}
+              {roomTypes && Object.keys(roomTypes).length > 0 && (
+                <Card className="shadow-lg border-0 mb-8">
+                  <CardHeader className="border-b border-gray-200 pb-4">
+                    <CardTitle className="flex items-center gap-2 text-xl">
+                      <PieChart className="h-5 w-5 text-purple-600" />
+                      Room Category Analysis
+                    </CardTitle>
+                    <CardDescription>
+                      Current room utilization by category
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
                           <tr>
-                            <th className="py-1 px-2 border">Type</th>
-                            <th className="py-1 px-2 border">Total</th>
-                            <th className="py-1 px-2 border">Occupied</th>
-                            <th className="py-1 px-2 border">Reserved</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Room Type
+                            </th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Total
+                            </th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Occupied
+                            </th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Reserved
+                            </th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Available
+                            </th>
+                            <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Utilization
+                            </th>
                           </tr>
                         </thead>
-                        <tbody>
-                          {Object.entries(roomTypes).map(([type, stats]) => (
-                            <tr key={type}>
-                              <td className="py-1 px-2 border">{type}</td>
-                              <td className="py-1 px-2 border">
-                                {stats.total}
-                              </td>
-                              <td className="py-1 px-2 border">
-                                {stats.occupied}
-                              </td>
-                              <td className="py-1 px-2 border">
-                                {stats.reserved}
-                              </td>
-                            </tr>
-                          ))}
+                        <tbody className="divide-y divide-gray-200">
+                          {Object.entries(roomTypes).map(([type, stats]) => {
+                            const available =
+                              stats.total - stats.occupied - stats.reserved;
+                            const utilization =
+                              (stats.occupied / stats.total) * 100;
+                            const level = getOccupancyLevel(utilization);
+
+                            return (
+                              <tr
+                                key={type}
+                                className="hover:bg-gray-50 transition-colors"
+                              >
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  {type}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
+                                  {stats.total}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-semibold">
+                                  {stats.occupied}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 text-right font-semibold">
+                                  {stats.reserved}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
+                                  {available}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                                  <Badge className={level.badge}>
+                                    {utilization.toFixed(1)}%
+                                  </Badge>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
-                  )}
-                  {/* Table Section */}
-                  <div className="overflow-x-auto border rounded-lg">
-                    <table className="min-w-full border">
-                      <thead className="bg-blue-50">
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Daily Breakdown Table */}
+              <Card className="shadow-lg border-0">
+                <CardHeader className="border-b border-gray-200 pb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-xl">
+                        <Eye className="h-5 w-5 text-blue-600" />
+                        Daily Occupancy Breakdown
+                      </CardTitle>
+                      <CardDescription>
+                        Detailed daily occupancy metrics and performance
+                        indicators
+                      </CardDescription>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="bg-blue-50 text-blue-700 border-blue-200"
+                    >
+                      {report.length} Days
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-2 py-1 border">Date</th>
-                          <th className="px-2 py-1 border">Rooms Occupied</th>
-                          <th className="px-2 py-1 border">Rooms Available</th>
-                          <th className="px-2 py-1 border">
-                            Occupancy Rate (%)
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Date
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Occupied
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Available
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Occupancy Rate
+                          </th>
+                          <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Performance
                           </th>
                         </tr>
                       </thead>
-                      <tbody>
-                        {report.length === 0 ? (
-                          <tr>
-                            <td
-                              colSpan={4}
-                              className="text-center text-gray-400 py-8"
-                            >
-                              No daily occupancy data available.
-                            </td>
-                          </tr>
-                        ) : (
-                          report.map((row) => (
-                            <tr
-                              key={row.date}
-                              className={
-                                row.occupancyRate >= 90
-                                  ? "bg-green-50"
-                                  : row.occupancyRate <= 30
-                                  ? "bg-red-50"
-                                  : ""
-                              }
-                            >
-                              <td className="px-2 py-1 border">{row.date}</td>
-                              <td className="px-2 py-1 border">
-                                {row.roomsOccupied}
-                              </td>
-                              <td className="px-2 py-1 border">
-                                {row.roomsAvailable}
-                              </td>
-                              <td className="px-2 py-1 border font-semibold">
-                                <span
-                                  className={
-                                    row.occupancyRate >= 90
-                                      ? "text-green-700"
-                                      : row.occupancyRate <= 30
-                                      ? "text-red-600"
-                                      : "text-blue-900"
-                                  }
-                                >
-                                  {row.occupancyRate.toFixed(1)}%
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        )}
+                      <tbody className="divide-y divide-gray-200">
+                        {[...report]
+                          .sort(
+                            (a, b) =>
+                              new Date(b.date).getTime() -
+                              new Date(a.date).getTime()
+                          )
+                          .map((day) => {
+                            const level = getOccupancyLevel(day.occupancyRate);
+                            return (
+                              <tr
+                                key={day.date}
+                                className="hover:bg-gray-50 transition-colors"
+                              >
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                  <div className="flex flex-col">
+                                    <span>{formatDate(day.date)}</span>
+                                    <span className="text-xs text-gray-500">
+                                      {day.date}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-semibold">
+                                  {day.roomsOccupied}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
+                                  {day.roomsAvailable}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                                  <span className={`font-bold ${level.color}`}>
+                                    {day.occupancyRate.toFixed(1)}%
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                                  <Badge className={level.badge}>
+                                    {day.occupancyRate >= 90
+                                      ? "High"
+                                      : day.occupancyRate >= 70
+                                      ? "Good"
+                                      : day.occupancyRate >= 50
+                                      ? "Moderate"
+                                      : day.occupancyRate >= 30
+                                      ? "Low"
+                                      : "Very Low"}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>
-                  {/* Report explanations */}
-                  <div className="mt-6 text-xs text-gray-500 leading-relaxed">
-                    <strong>Occupancy Rate</strong> = (Rooms Occupied ÷ Rooms
-                    Available) × 100.
-                    <br />
-                    <span className="text-green-600 font-semibold">
-                      Green rows
-                    </span>{" "}
-                    indicate high occupancy days (&ge; 90%),{" "}
-                    <span className="text-red-600 font-semibold">red rows</span>{" "}
-                    indicate low occupancy (&le; 30%).
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {selectedHotel && !loading && report.length === 0 && (
+            <Card className="shadow-lg border-0">
+              <CardContent className="py-16 text-center">
+                <BarChart3 className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  No Occupancy Data Available
+                </h3>
+                <p className="text-gray-500 max-w-md mx-auto">
+                  No occupancy data found for the selected hotel and date range.
+                  Try adjusting your filters or select a different period.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
     </div>

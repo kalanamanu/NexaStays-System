@@ -114,7 +114,7 @@ export default function Footer() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
+                placeholder="info@nexastays.lk"
                 aria-label="Email address"
                 className="w-full sm:flex-1 rounded-md bg-white/6 text-white placeholder-white/60 px-3 py-2 border border-white/8 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
               />
@@ -295,7 +295,7 @@ export default function Footer() {
                     href="mailto:hello@nexastays.com"
                     className="text-white/80 hover:text-white"
                   >
-                    hello@nexastays.example
+                    hello@nexastays.com
                   </a>
                 </li>
                 <li className="pt-1">

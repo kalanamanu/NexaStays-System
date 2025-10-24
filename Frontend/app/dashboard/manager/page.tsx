@@ -70,8 +70,8 @@ export default function ManagerDashboard() {
     totalRevenue: 0,
     currentlyCheckedIn: 0,
     suiteRevenue: 0,
-    travelCompanyBookings: 0,
   });
+  const [travelCompanyRevenue, setTravelCompanyRevenue] = useState(0);
   const [recentReservations, setRecentReservations] = useState<Reservation[]>(
     []
   );
@@ -97,9 +97,12 @@ export default function ManagerDashboard() {
   useEffect(() => {
     async function fetchStatsAndRecents() {
       const token = localStorage.getItem("token");
-      const res = await fetch("http://localhost:5000/api/reservations/all", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(
+        "http://localhost:5000/api/manager/get-all-reservations",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       const data = await res.json();
       const today = new Date();
       const todayStr = today.toISOString().slice(0, 10);
@@ -110,7 +113,6 @@ export default function ManagerDashboard() {
       let totalReservations = 0;
       let totalRevenue = 0;
       let suiteRevenue = 0;
-      let travelCompanyBookings = 0;
 
       // Lookup hotel names
       const hotelsById = Object.fromEntries(
@@ -137,9 +139,6 @@ export default function ManagerDashboard() {
         const roomType = r.roomType || r.room?.type || "";
         if (roomType.toLowerCase().includes("suite"))
           suiteRevenue += r.totalAmount || 0;
-        // Example: if travel company bookings are identified by customer.email ending with @travel-company.com
-        const guestEmail = r.guestEmail || r.customer?.email || "";
-        if (guestEmail.endsWith("@travel-company.com")) travelCompanyBookings++;
       });
 
       // Attach hotel name for display (via relation if present, else lookup)
@@ -159,13 +158,28 @@ export default function ManagerDashboard() {
         totalRevenue,
         currentlyCheckedIn,
         suiteRevenue,
-        travelCompanyBookings,
       });
 
       setRecentReservations(reservationsWithHotelName.slice(0, 6));
     }
     fetchStatsAndRecents();
   }, [hotels]);
+
+  // Fetch travel company block booking revenue
+  useEffect(() => {
+    async function fetchTravelCompanyRevenue() {
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        "http://localhost:5000/api/manager/reports/travel-company-revenue",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      const data = await res.json();
+      setTravelCompanyRevenue(data.totalRevenue || 0);
+    }
+    fetchTravelCompanyRevenue();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 flex flex-col">
@@ -252,7 +266,7 @@ export default function ManagerDashboard() {
           </div>
 
           {/* Revenue/Advanced Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <Card className="bg-white/80 border-l-4 border-blue-800 shadow-lg">
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-gray-600">
@@ -283,22 +297,6 @@ export default function ManagerDashboard() {
                   {stats.suiteRevenue.toLocaleString()}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">Residential suites</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-white/80 border-l-4 border-orange-600 shadow-lg">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Travel Company Bookings
-                </CardTitle>
-                <div className="p-2 bg-orange-100 rounded-lg">
-                  <Briefcase className="h-5 w-5 text-orange-600" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-gray-900">
-                  {stats.travelCompanyBookings}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Active bookings</p>
               </CardContent>
             </Card>
           </div>

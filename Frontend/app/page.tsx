@@ -331,7 +331,7 @@ export default function HomePage() {
               {[
                 {
                   name: "Standard",
-                  price: "$120",
+
                   image: "/images/room-standard.jpg",
                   features: ["Queen Bed", "City View", "WiFi", "Mini Bar"],
                   gradient: "from-blue-400 to-purple-500",
@@ -339,7 +339,7 @@ export default function HomePage() {
                 },
                 {
                   name: "Deluxe",
-                  price: "$180",
+
                   image: "/images/room-deluxe.jpg",
                   features: [
                     "King Bed",
@@ -352,7 +352,7 @@ export default function HomePage() {
                 },
                 {
                   name: "Suite",
-                  price: "$280",
+
                   image: "/images/room-suite.jpg",
                   features: [
                     "Separate Living",
@@ -365,7 +365,7 @@ export default function HomePage() {
                 },
                 {
                   name: "Residential Suite",
-                  price: "$450",
+
                   image: "/images/room-residential.jpg",
                   features: [
                     "Full Kitchen",
@@ -423,14 +423,6 @@ export default function HomePage() {
                             <h3 className="text-2xl font-bold text-white drop-shadow">
                               {room.name}
                             </h3>
-                            <div className="text-right">
-                              <div className="text-3xl font-bold text-white drop-shadow">
-                                {room.price}
-                              </div>
-                              <div className="text-white/80 text-sm drop-shadow">
-                                per night
-                              </div>
-                            </div>
                           </div>
                         </div>
                       </CardHeader>
@@ -466,9 +458,6 @@ export default function HomePage() {
             </motion.div>
           </div>
         </section>
-
-        {/* INSERTED: Our Hotels Section */}
-        <HotelsSection />
 
         <Footer />
       </div>
