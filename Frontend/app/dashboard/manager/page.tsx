@@ -1,21 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { useEffect, useState } from "react";
+import NavBar from "@/components/nav-bar";
+import ManagerSidebar from "@/components/ui/ManagerSidebar";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -25,638 +14,402 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  CalendarIcon,
-  Download,
-  TrendingUp,
+  CalendarCheck2,
+  CalendarX2,
+  ClipboardList,
   Users,
-  DollarSign,
-  Bed,
+  TrendingUp,
+  BarChart2,
+  BedDouble,
+  Briefcase,
+  ArrowRight,
 } from "lucide-react";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
-import NavBar from "@/components/nav-bar";
-import { useUser } from "@/context/user-context";
-import { useRouter } from "next/navigation";
-import {
-  Bar,
-  BarChart,
-  Line,
-  LineChart,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { Button } from "@/components/ui/button";
+
+// Data interfaces
+interface Hotel {
+  id: number;
+  name: string;
+}
+interface Reservation {
+  id: number;
+  guestName?: string;
+  guestEmail?: string;
+  guestPhone?: string;
+  hotelId?: number;
+  roomType?: string;
+  roomNumber?: string;
+  arrivalDate?: string;
+  departureDate?: string;
+  status?: string;
+  guests?: number;
+  totalAmount?: number;
+  createdAt?: string;
+  customer?: {
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    email?: string;
+  };
+  room?: {
+    number?: string;
+    type?: string;
+  };
+  hotel?: {
+    id: number;
+    name: string;
+  };
+  hotelName?: string;
+}
 
 export default function ManagerDashboard() {
-  const { user } = useUser();
-  const router = useRouter();
-  const [dateRange, setDateRange] = useState<{
-    from: Date | undefined;
-    to?: Date | undefined;
-  }>({
-    from: new Date(new Date().getFullYear(), 0, 1), // Jan 1st this year
-    to: new Date(), // today
+  const [stats, setStats] = useState({
+    todayCheckIns: 0,
+    todayCheckOuts: 0,
+    totalReservations: 0,
+    totalRevenue: 0,
+    currentlyCheckedIn: 0,
+    suiteRevenue: 0,
+    travelCompanyBookings: 0,
   });
+  const [recentReservations, setRecentReservations] = useState<Reservation[]>(
+    []
+  );
+  const [hotels, setHotels] = useState<Hotel[]>([]);
 
-  // State for analytics
-  const [occupancyData, setOccupancyData] = useState<any[]>([]);
-  const [revenueData, setRevenueData] = useState<any[]>([]);
-  const [totalGuests, setTotalGuests] = useState<number>(0);
-  const [loading, setLoading] = useState(false);
-
+  // Fetch hotels for name mapping (pass token!)
   useEffect(() => {
-    if (!dateRange.from || !dateRange.to) return;
-    setLoading(true);
-    const from = dateRange.from.toISOString().slice(0, 10);
-    const to = dateRange.to.toISOString().slice(0, 10);
-
-    Promise.all([
-      fetch(
-        `http://localhost:5000/api/analytics/occupancy?from=${from}&to=${to}`
-      ).then((r) => r.json()),
-      fetch(
-        `http://localhost:5000/api/analytics/revenue?from=${from}&to=${to}`
-      ).then((r) => r.json()),
-      fetch(
-        `http://localhost:5000/api/analytics/guests?from=${from}&to=${to}`
-      ).then((r) => r.json()),
-    ])
-      .then(([occupancy, revenue, guests]) => {
-        setOccupancyData(occupancy);
-        setRevenueData(revenue);
-        setTotalGuests(guests.totalGuests);
-      })
-      .catch(() => {
-        setOccupancyData([]);
-        setRevenueData([]);
-        setTotalGuests(0);
-      })
-      .finally(() => setLoading(false));
-  }, [dateRange, user]);
-
-  // Calculate metrics from fetched data
-  const totalRevenue = revenueData.reduce(
-    (sum, month) =>
-      sum + (month.room || 0) + (month.restaurant || 0) + (month.other || 0),
-    0
-  );
-  const averageOccupancy = occupancyData.length
-    ? Math.round(
-        occupancyData.reduce((sum, day) => sum + (day.occupancy || 0), 0) /
-          occupancyData.length
-      )
-    : 0;
-
-  // Calculate Total Room Revenue and Sold Room Nights
-  const totalRoomRevenue = revenueData.reduce(
-    (sum, month) => sum + (month.room || 0),
-    0
-  );
-  const soldRoomNights = occupancyData.reduce(
-    (sum, day) =>
-      sum +
-      (Object.values(day.byType || {}).reduce(
-        (a: number, b: unknown) => a + (typeof b === "number" ? b : 0),
-        0
-      ) || 0),
-    0
-  );
-  const totalDays = occupancyData.length;
-  const totalRooms = occupancyData.length > 0 ? occupancyData[0].rooms : 0;
-  const totalAvailableRoomNights = totalRooms * totalDays;
-
-  const averageDailyRate = soldRoomNights
-    ? totalRoomRevenue / soldRoomNights
-    : 0;
-  const revenuePerRoom = totalAvailableRoomNights
-    ? totalRoomRevenue / totalAvailableRoomNights
-    : 0;
-
-  // PDF Export Handlers
-  function exportOccupancyPDF() {
-    const doc = new jsPDF();
-    doc.text("Occupancy Report", 14, 16);
-    if (!occupancyData.length) {
-      doc.text("No data", 14, 30);
-    } else {
-      const byTypeKeys = Object.keys(occupancyData[0]?.byType || {});
-      const head = [
-        [
-          "Date",
-          "Occupancy (%)",
-          ...byTypeKeys.map((type) => `${type} (Occupied)`),
-        ],
-      ];
-      const body = occupancyData.map((day) => [
-        day.date,
-        day.occupancy,
-        ...byTypeKeys.map((type) => day.byType[type] ?? 0),
-      ]);
-      autoTable(doc, {
-        head,
-        body,
-        startY: 22,
+    async function fetchHotels() {
+      const token = localStorage.getItem("token");
+      const res = await fetch("http://localhost:5000/api/hotels", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       });
+      const data = await res.json();
+      setHotels(Array.isArray(data) ? data : data.data || []);
     }
-    doc.save(
-      `occupancy-report_${
-        dateRange.from?.toISOString().slice(0, 10) ?? ""
-      }_to_${dateRange.to?.toISOString().slice(0, 10) ?? ""}.pdf`
-    );
-  }
+    fetchHotels();
+  }, []);
 
-  function exportRevenuePDF() {
-    const doc = new jsPDF();
-    doc.text("Revenue Report", 14, 16);
-    if (!revenueData.length) {
-      doc.text("No data", 14, 30);
-    } else {
-      const head = [["Month", "Room Revenue", "Restaurant", "Other Services"]];
-      const body = revenueData.map((r) => [
-        r.month,
-        r.room,
-        r.restaurant,
-        r.other,
-      ]);
-      autoTable(doc, {
-        head,
-        body,
-        startY: 22,
+  // Fetch reservations and aggregate stats (pass token!)
+  useEffect(() => {
+    async function fetchStatsAndRecents() {
+      const token = localStorage.getItem("token");
+      const res = await fetch("http://localhost:5000/api/reservations/all", {
+        headers: { Authorization: `Bearer ${token}` },
       });
-    }
-    doc.save(
-      `revenue-report_${dateRange.from?.toISOString().slice(0, 10) ?? ""}_to_${
-        dateRange.to?.toISOString().slice(0, 10) ?? ""
-      }.pdf`
-    );
-  }
+      const data = await res.json();
+      const today = new Date();
+      const todayStr = today.toISOString().slice(0, 10);
 
-  if (!user) return null;
+      let todayCheckIns = 0;
+      let todayCheckOuts = 0;
+      let currentlyCheckedIn = 0;
+      let totalReservations = 0;
+      let totalRevenue = 0;
+      let suiteRevenue = 0;
+      let travelCompanyBookings = 0;
+
+      // Lookup hotel names
+      const hotelsById = Object.fromEntries(
+        hotels.map((h) => [String(h.id), h.name])
+      );
+
+      // Sort reservations (latest first)
+      const sorted = Array.isArray(data)
+        ? data
+        : Array.isArray(data.reservations)
+        ? data.reservations
+        : [];
+
+      // Stats calculation
+      sorted.forEach((r: Reservation) => {
+        const arrivalDate = r.arrivalDate?.slice(0, 10);
+        const departureDate = r.departureDate?.slice(0, 10);
+        if (arrivalDate === todayStr) todayCheckIns++;
+        if (departureDate === todayStr) todayCheckOuts++;
+        if (r.status === "checked-in") currentlyCheckedIn++;
+        totalReservations++;
+        totalRevenue += r.totalAmount || 0;
+        // Prefer roomType from room relation if available
+        const roomType = r.roomType || r.room?.type || "";
+        if (roomType.toLowerCase().includes("suite"))
+          suiteRevenue += r.totalAmount || 0;
+        // Example: if travel company bookings are identified by customer.email ending with @travel-company.com
+        const guestEmail = r.guestEmail || r.customer?.email || "";
+        if (guestEmail.endsWith("@travel-company.com")) travelCompanyBookings++;
+      });
+
+      // Attach hotel name for display (via relation if present, else lookup)
+      const reservationsWithHotelName = sorted.map((r: Reservation) => ({
+        ...r,
+        hotelName: r.hotel?.name
+          ? r.hotel.name
+          : hotelsById[String(r.hotelId)] || "",
+        roomNumber: r.room?.number || r.roomNumber,
+        roomType: r.room?.type || r.roomType,
+      }));
+
+      setStats({
+        todayCheckIns,
+        todayCheckOuts,
+        totalReservations,
+        totalRevenue,
+        currentlyCheckedIn,
+        suiteRevenue,
+        travelCompanyBookings,
+      });
+
+      setRecentReservations(reservationsWithHotelName.slice(0, 6));
+    }
+    fetchStatsAndRecents();
+  }, [hotels]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 flex flex-col">
       <NavBar />
-
-      <div className="py-8 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+      <ManagerSidebar />
+      <main className="flex-1 ml-60 pt-16">
+        <div className="py-8 px-6 lg:px-8 max-w-7xl mx-auto">
+          {/* Header */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
               Manager Dashboard
             </h1>
-            <p className="text-gray-600 dark:text-gray-300 mt-2">
-              Monitor hotel performance and analytics
+            <p className="text-gray-600 dark:text-gray-400 mt-2">
+              View high-level hotel performance, occupancy, and revenue metrics.
             </p>
           </div>
 
-          {/* Key Metrics */}
+          {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Revenue
+            <Card className="bg-white/80 border-l-4 border-blue-500 shadow-lg">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Today's Check-Ins
                 </CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <CalendarCheck2 className="h-5 w-5 text-blue-600" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {loading ? "Loading..." : `$${totalRevenue.toLocaleString()}`}
+                <div className="text-3xl font-bold text-gray-900">
+                  {stats.todayCheckIns}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  +12% from last period
-                </p>
+                <p className="text-xs text-gray-500 mt-1">Arrivals today</p>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Avg Occupancy
+            <Card className="bg-white/80 border-l-4 border-green-500 shadow-lg">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Today's Check-Outs
                 </CardTitle>
-                <Bed className="h-4 w-4 text-muted-foreground" />
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <CalendarX2 className="h-5 w-5 text-green-600" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {loading ? "Loading..." : `${averageOccupancy}%`}
+                <div className="text-3xl font-bold text-gray-900">
+                  {stats.todayCheckOuts}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  +5% from last period
-                </p>
+                <p className="text-xs text-gray-500 mt-1">Departures today</p>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Guests
+            <Card className="bg-white/80 border-l-4 border-purple-500 shadow-lg">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Total Reservations
                 </CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <ClipboardList className="h-5 w-5 text-purple-600" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
-                  {loading ? "Loading..." : totalGuests}
+                <div className="text-3xl font-bold text-gray-900">
+                  {stats.totalReservations}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  +8% from last period
-                </p>
+                <p className="text-xs text-gray-500 mt-1">All time</p>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Growth Rate
+            <Card className="bg-white/80 border-l-4 border-amber-500 shadow-lg">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Currently Checked-In
                 </CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                <div className="p-2 bg-amber-100 rounded-lg">
+                  <Users className="h-5 w-5 text-amber-600" />
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">+15.2%</div>
-                <p className="text-xs text-muted-foreground">
-                  Monthly growth rate
-                </p>
+                <div className="text-3xl font-bold text-gray-900">
+                  {stats.currentlyCheckedIn}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Active guests</p>
               </CardContent>
             </Card>
           </div>
 
-          <Tabs defaultValue="occupancy" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="occupancy">Occupancy Reports</TabsTrigger>
-              <TabsTrigger value="revenue">Revenue Reports</TabsTrigger>
-            </TabsList>
+          {/* Revenue/Advanced Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <Card className="bg-white/80 border-l-4 border-blue-800 shadow-lg">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Total Revenue (LKR)
+                </CardTitle>
+                <div className="p-2 bg-blue-200 rounded-lg">
+                  <BarChart2 className="h-5 w-5 text-blue-800" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-gray-900">
+                  {stats.totalRevenue.toLocaleString()}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">All time</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-white/80 border-l-4 border-green-800 shadow-lg">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Suite Revenue (LKR)
+                </CardTitle>
+                <div className="p-2 bg-green-200 rounded-lg">
+                  <BedDouble className="h-5 w-5 text-green-800" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-gray-900">
+                  {stats.suiteRevenue.toLocaleString()}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Residential suites</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-white/80 border-l-4 border-orange-600 shadow-lg">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Travel Company Bookings
+                </CardTitle>
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <Briefcase className="h-5 w-5 text-orange-600" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-gray-900">
+                  {stats.travelCompanyBookings}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Active bookings</p>
+              </CardContent>
+            </Card>
+          </div>
 
-            {/* Occupancy Tab */}
-            <TabsContent value="occupancy">
-              <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <div>
-                        <CardTitle>Occupancy Analysis</CardTitle>
-                        <CardDescription>
-                          Track room occupancy over time
-                        </CardDescription>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "justify-start text-left font-normal",
-                                !dateRange.from && "text-muted-foreground"
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {dateRange.from ? (
-                                dateRange.to ? (
-                                  <>
-                                    {format(dateRange.from, "LLL dd, y")} -{" "}
-                                    {format(dateRange.to, "LLL dd, y")}
-                                  </>
-                                ) : (
-                                  format(dateRange.from, "LLL dd, y")
-                                )
-                              ) : (
-                                "Pick a date range"
-                              )}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="end">
-                            <Calendar
-                              initialFocus
-                              mode="range"
-                              defaultMonth={dateRange.from}
-                              selected={dateRange}
-                              onSelect={(range) => {
-                                if (range) setDateRange(range);
-                              }}
-                              numberOfMonths={2}
-                              required={false}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <Button variant="outline" onClick={exportOccupancyPDF}>
-                          <Download className="h-4 w-4 mr-2" />
-                          Export PDF
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-80">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={occupancyData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis
-                            dataKey="date"
-                            tickFormatter={(value) =>
-                              format(new Date(value), "MMM dd")
-                            }
-                          />
-                          <YAxis />
-                          <Tooltip
-                            labelFormatter={(value) =>
-                              format(new Date(value), "MMM dd, yyyy")
-                            }
-                            formatter={(value: number) => [
-                              `${value}%`,
-                              "Occupancy",
-                            ]}
-                          />
-                          <Bar dataKey="occupancy" fill="#3b82f6" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Current Occupancy</CardTitle>
-                      <CardDescription>Real-time room status</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Room Type</TableHead>
-                            <TableHead>Occupied</TableHead>
-                            <TableHead>Available</TableHead>
-                            <TableHead>Rate</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {occupancyData.length > 0 &&
-                          occupancyData[occupancyData.length - 1].byType &&
-                          occupancyData[occupancyData.length - 1]
-                            .roomsByType ? (
-                            Object.entries(
-                              occupancyData[occupancyData.length - 1].byType
-                            ).map(([type, occupied]: any) => {
-                              const totalRooms =
-                                occupancyData[occupancyData.length - 1]
-                                  .roomsByType[type] || 0;
-                              const available = totalRooms - occupied;
-                              const rate = totalRooms
-                                ? Math.round((occupied / totalRooms) * 100)
-                                : 0;
-                              return (
-                                <TableRow key={type}>
-                                  <TableCell>{type}</TableCell>
-                                  <TableCell>{occupied}</TableCell>
-                                  <TableCell>{available}</TableCell>
-                                  <TableCell>{rate}%</TableCell>
-                                </TableRow>
-                              );
-                            })
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={4}>No data</TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Projected Occupancy</CardTitle>
-                      <CardDescription>Next 7 days forecast</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {[
-                          { date: "Today", occupancy: 92, trend: "up" },
-                          { date: "Tomorrow", occupancy: 88, trend: "down" },
-                          { date: "Aug 17", occupancy: 95, trend: "up" },
-                          { date: "Aug 18", occupancy: 82, trend: "down" },
-                          { date: "Aug 19", occupancy: 90, trend: "up" },
-                          { date: "Aug 20", occupancy: 87, trend: "down" },
-                          { date: "Aug 21", occupancy: 93, trend: "up" },
-                        ].map((day) => (
-                          <div
-                            key={day.date}
-                            className="flex items-center justify-between"
-                          >
-                            <span className="text-sm font-medium">
-                              {day.date}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm">{day.occupancy}%</span>
-                              <TrendingUp
-                                className={cn(
-                                  "h-4 w-4",
-                                  day.trend === "up"
-                                    ? "text-green-500"
-                                    : "text-red-500 rotate-180"
-                                )}
-                              />
+          {/* Recent Reservations */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-bold text-lg text-gray-700 dark:text-gray-100 flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-blue-600" />
+                Recent Reservations
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  (window.location.href = "/dashboard/manager/reservations")
+                }
+              >
+                View All
+                <ArrowRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+            <div className="overflow-x-auto bg-white rounded-xl shadow">
+              <Table>
+                <TableHeader className="bg-gray-50">
+                  <TableRow>
+                    <TableHead>Guest</TableHead>
+                    <TableHead>Hotel</TableHead>
+                    <TableHead>Room</TableHead>
+                    <TableHead>Dates</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentReservations.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="text-center py-8 text-gray-500"
+                      >
+                        No recent reservations
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    recentReservations.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell>
+                          <div className="font-medium text-gray-900">
+                            {r.guestName ||
+                              (r.customer &&
+                                `${r.customer.firstName} ${r.customer.lastName}`)}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {r.guestEmail || (r.customer && r.customer.email)}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {r.hotelName}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-semibold">{r.roomType}</span>
+                            {r.roomNumber ? (
+                              <span className="text-sm text-gray-600">
+                                Room {r.roomNumber}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-amber-600">
+                                Unassigned
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            <div className="font-medium">
+                              {r.arrivalDate?.slice(0, 10)}
+                            </div>
+                            <div className="text-gray-500">
+                              to {r.departureDate?.slice(0, 10)}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            </TabsContent>
-
-            {/* Revenue Tab */}
-            <TabsContent value="revenue">
-              <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                      <div>
-                        <CardTitle>Revenue Analysis</CardTitle>
-                        <CardDescription>
-                          Track revenue across all sources
-                        </CardDescription>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className={cn(
-                                "justify-start text-left font-normal",
-                                !dateRange.from && "text-muted-foreground"
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {dateRange.from ? (
-                                dateRange.to ? (
-                                  <>
-                                    {format(dateRange.from, "LLL dd, y")} -{" "}
-                                    {format(dateRange.to, "LLL dd, y")}
-                                  </>
-                                ) : (
-                                  format(dateRange.from, "LLL dd, y")
-                                )
-                              ) : (
-                                "Pick a date range"
-                              )}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="end">
-                            <Calendar
-                              initialFocus
-                              mode="range"
-                              defaultMonth={dateRange.from}
-                              selected={dateRange}
-                              onSelect={(range) => {
-                                if (range) setDateRange(range);
-                              }}
-                              numberOfMonths={2}
-                              required={false}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <Button variant="outline" onClick={exportRevenuePDF}>
-                          <Download className="h-4 w-4 mr-2" />
-                          Export PDF
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-80">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={revenueData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="month" />
-                          <YAxis />
-                          <Tooltip
-                            formatter={(value: number) => [
-                              `$${value.toLocaleString()}`,
-                              "",
-                            ]}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="room"
-                            stroke="#3b82f6"
-                            strokeWidth={2}
-                            name="Room Revenue"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="restaurant"
-                            stroke="#10b981"
-                            strokeWidth={2}
-                            name="Restaurant"
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="other"
-                            stroke="#f59e0b"
-                            strokeWidth={2}
-                            name="Other Services"
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Revenue Breakdown</CardTitle>
-                      <CardDescription>
-                        Current month performance
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      {/* Example: show most recent month breakdown */}
-                      {revenueData.length > 0 ? (
-                        (() => {
-                          const lastMonth = revenueData[revenueData.length - 1];
-                          return (
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                                  <span className="text-sm">Room Revenue</span>
-                                </div>
-                                <span className="font-semibold">
-                                  ${lastMonth.room?.toLocaleString() ?? 0}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                                  <span className="text-sm">Restaurant</span>
-                                </div>
-                                <span className="font-semibold">
-                                  ${lastMonth.restaurant?.toLocaleString() ?? 0}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                                  <span className="text-sm">
-                                    Other Services
-                                  </span>
-                                </div>
-                                <span className="font-semibold">
-                                  ${lastMonth.other?.toLocaleString() ?? 0}
-                                </span>
-                              </div>
-                              {/* Add any other breakdowns as needed */}
-                            </div>
-                          );
-                        })()
-                      ) : (
-                        <div>No data available</div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Performance Metrics</CardTitle>
-                      <CardDescription>
-                        Key performance indicators
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Average Daily Rate</span>
-                          <span className="font-semibold">
-                            {loading
-                              ? "Loading..."
-                              : `$${averageDailyRate.toFixed(2)}`}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Revenue per Room</span>
-                          <span className="font-semibold">
-                            {loading
-                              ? "Loading..."
-                              : `$${revenuePerRoom.toFixed(2)}`}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Guest Satisfaction</span>
-                          <span className="font-semibold">4.7/5</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm">Repeat Customers</span>
-                          <span className="font-semibold">32%</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            className={
+                              r.status === "checked-in"
+                                ? "bg-green-100 text-green-800 border-green-200"
+                                : r.status === "checked-out"
+                                ? "bg-gray-100 text-gray-800 border-gray-200"
+                                : r.status === "confirmed"
+                                ? "bg-blue-100 text-blue-800 border-blue-200"
+                                : r.status === "reserved"
+                                ? "bg-amber-100 text-amber-800 border-amber-200"
+                                : "font-medium px-2 py-1"
+                            }
+                          >
+                            {r.status &&
+                              r.status.charAt(0).toUpperCase() +
+                                r.status.slice(1)}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

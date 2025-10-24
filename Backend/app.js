@@ -13,6 +13,7 @@ const roomRoutes = require("./routes/roomRoutes");
 const analyticsRoutes = require("./routes/analyticsRoutes");
 const hotelsRouter = require("./routes/hotels");
 const clerkReportRoutes = require("./routes/clerkReport");
+const managerRoutes = require("./routes/managerRoutes");
 
 // Error handlers (404 + general)
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
@@ -32,6 +33,7 @@ app.use("/api/rooms", roomRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/hotels", hotelsRouter);
 app.use("/api/reports", clerkReportRoutes);
+app.use("/api/manager", managerRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

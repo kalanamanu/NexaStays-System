@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
+import NavBar from "@/components/nav-bar";
+import ClerkSidebar from "@/components/ui/ClerkSidebar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,8 +27,29 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
-import { Edit, Trash2, Search, AlertCircle, Key } from "lucide-react";
+import {
+  Search,
+  Filter,
+  Building,
+  Users,
+  Calendar,
+  Phone,
+  Mail,
+  Eye,
+  Edit,
+  Trash2,
+  X,
+  User,
+  Bed,
+  DollarSign,
+  Clock,
+  MapPin,
+  AlertTriangle,
+  CheckCircle,
+  Ban,
+} from "lucide-react";
 import {
   Select,
   SelectTrigger,
@@ -34,7 +57,6 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
-import NavBar from "@/components/nav-bar";
 import { useUser } from "@/context/user-context";
 import { useToast } from "@/hooks/use-toast";
 
@@ -58,8 +80,8 @@ interface Reservation {
   hotelName?: string;
   roomType: string;
   roomNumber?: string;
-  arrivalDate: string; // ISO
-  departureDate: string; // ISO
+  arrivalDate: string;
+  departureDate: string;
   status: ReservationStatus;
   guests: number;
   totalAmount: number;
@@ -103,9 +125,16 @@ export default function ClerkReservationsPage() {
     rateType: "nightly" as "nightly" | "weekly" | "monthly",
   });
   const [cancelTarget, setCancelTarget] = useState<Reservation | null>(null);
-
   const [detailReservation, setDetailReservation] =
     useState<Reservation | null>(null);
+
+  // Stats
+  const [stats, setStats] = useState({
+    total: 0,
+    checkedIn: 0,
+    pending: 0,
+    confirmed: 0,
+  });
 
   // Fetch all hotels for filtering
   useEffect(() => {
@@ -154,6 +183,24 @@ export default function ClerkReservationsPage() {
         );
 
         setReservations(flatReservations);
+
+        // Calculate stats
+        const checkedIn = flatReservations.filter(
+          (r) => r.status === "checked-in"
+        ).length;
+        const pending = flatReservations.filter(
+          (r) => r.status === "pending"
+        ).length;
+        const confirmed = flatReservations.filter(
+          (r) => r.status === "confirmed"
+        ).length;
+
+        setStats({
+          total: flatReservations.length,
+          checkedIn,
+          pending,
+          confirmed,
+        });
       } catch (err: any) {
         setReservationError(err.message || "Failed to load reservations.");
       } finally {
@@ -171,6 +218,9 @@ export default function ClerkReservationsPage() {
         .includes(searchTerm.toLowerCase()) ||
       (reservation.guestPhone || reservation.phoneNumber || "")
         .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (reservation.email || "")
+        .toLowerCase()
         .includes(searchTerm.toLowerCase());
     const matchesHotel =
       !selectedHotel || selectedHotel === "all-hotels"
@@ -179,25 +229,54 @@ export default function ClerkReservationsPage() {
     return matchesSearch && matchesHotel;
   });
 
-  // Status coloring
-  const getStatusColor = (status: ReservationStatus) => {
+  // Status coloring and icons
+  const getStatusConfig = (status: ReservationStatus) => {
     switch (status) {
       case "confirmed":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
+        return {
+          color: "bg-blue-100 text-blue-800 border-blue-200",
+          icon: CheckCircle,
+        };
       case "checked-in":
-        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
+        return {
+          color: "bg-green-100 text-green-800 border-green-200",
+          icon: CheckCircle,
+        };
       case "checked-out":
-        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
+        return {
+          color: "bg-gray-100 text-gray-800 border-gray-200",
+          icon: CheckCircle,
+        };
       case "pending":
-        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
+        return {
+          color: "bg-yellow-100 text-yellow-800 border-yellow-200",
+          icon: Clock,
+        };
       case "no-show":
-        return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300";
+        return {
+          color: "bg-red-100 text-red-800 border-red-200",
+          icon: Ban,
+        };
       case "cancelled":
-        return "bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-400";
+        return {
+          color: "bg-gray-200 text-gray-600 border-gray-300",
+          icon: Ban,
+        };
       case "reserved":
-        return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300";
+        return {
+          color: "bg-orange-100 text-orange-800 border-orange-200",
+          icon: CheckCircle,
+        };
+      case "pending_payment":
+        return {
+          color: "bg-purple-100 text-purple-800 border-purple-200",
+          icon: Clock,
+        };
       default:
-        return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300";
+        return {
+          color: "bg-gray-100 text-gray-800 border-gray-200",
+          icon: Clock,
+        };
     }
   };
 
@@ -243,7 +322,7 @@ export default function ClerkReservationsPage() {
       setShowEditDialog(false);
       toast({
         title: "Reservation Updated",
-        description: "Reservation details saved.",
+        description: "Reservation details have been successfully updated.",
       });
     } catch (error: any) {
       toast({
@@ -259,6 +338,7 @@ export default function ClerkReservationsPage() {
     setCancelTarget(res);
     setShowCancelDialog(true);
   }
+
   async function doCancelReservation() {
     if (!cancelTarget) return;
     try {
@@ -286,7 +366,7 @@ export default function ClerkReservationsPage() {
       setCancelTarget(null);
       toast({
         title: "Reservation Cancelled",
-        description: "Reservation has been cancelled.",
+        description: "Reservation has been successfully cancelled.",
       });
     } catch (error: any) {
       toast({
@@ -299,7 +379,12 @@ export default function ClerkReservationsPage() {
 
   // Delete reservation
   async function handleDeleteReservation(res: Reservation) {
-    if (!confirm("Are you sure you want to delete this reservation?")) return;
+    if (
+      !confirm(
+        "Are you sure you want to permanently delete this reservation? This action cannot be undone."
+      )
+    )
+      return;
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
@@ -315,7 +400,7 @@ export default function ClerkReservationsPage() {
       setReservations((prev) => prev.filter((r) => r.id !== res.id));
       toast({
         title: "Reservation Deleted",
-        description: "Reservation has been deleted.",
+        description: "Reservation has been permanently deleted.",
       });
     } catch (error: any) {
       toast({
@@ -339,190 +424,351 @@ export default function ClerkReservationsPage() {
     }));
   }
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const formatDateTime = (dateString: string) => {
+    return new Date(dateString).toLocaleString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800">
       <NavBar />
-      <div className="py-8 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                Reservations
-              </h1>
-              <p className="text-gray-600 dark:text-gray-300 mt-2">
-                Search, filter, view, edit, cancel, or delete reservations.
-              </p>
-            </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Select
-                value={String(selectedHotel)}
-                onValueChange={setSelectedHotel}
-              >
-                <SelectTrigger className="min-w-[180px]">
-                  <SelectValue placeholder="Filter by Hotel" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-hotels" key="all-hotels">
-                    All Hotels
-                  </SelectItem>
-                  {hotels.map((h) => (
-                    <SelectItem key={h.id} value={String(h.id)}>
-                      {h.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="relative flex-1 max-w-xs">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input
-                  placeholder="Search by guest or phone..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+      <ClerkSidebar />
+
+      <main className="ml-60 pt-16 min-h-screen">
+        <div className="py-8 px-6 lg:px-8 max-w-7xl mx-auto">
+          {/* Header Section */}
+          <div className="mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                  Reservation Management
+                </h1>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Manage all hotel reservations, view details, and update status
+                </p>
               </div>
             </div>
           </div>
-          <Card>
-            <CardHeader>
-              <CardTitle>All Reservations</CardTitle>
-              <CardDescription>Manage all hotel reservations</CardDescription>
+
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <Card className="bg-white/80 backdrop-blur-sm border-l-4 border-l-blue-500 shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">
+                      Total Reservations
+                    </p>
+                    <p className="text-3xl font-bold text-gray-900">
+                      {stats.total}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-blue-100 rounded-lg">
+                    <Users className="h-6 w-6 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white/80 backdrop-blur-sm border-l-4 border-l-green-500 shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">
+                      Checked-In
+                    </p>
+                    <p className="text-3xl font-bold text-gray-900">
+                      {stats.checkedIn}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-green-100 rounded-lg">
+                    <CheckCircle className="h-6 w-6 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white/80 backdrop-blur-sm border-l-4 border-l-yellow-500 shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Pending</p>
+                    <p className="text-3xl font-bold text-gray-900">
+                      {stats.pending}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-yellow-100 rounded-lg">
+                    <Clock className="h-6 w-6 text-yellow-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* <Card className="bg-white/80 backdrop-blur-sm border-l-4 border-l-purple-500 shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">
+                      Confirmed
+                    </p>
+                    <p className="text-3xl font-bold text-gray-900">
+                      {stats.confirmed}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-purple-100 rounded-lg">
+                    <CheckCircle className="h-6 w-6 text-purple-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card> */}
+          </div>
+
+          {/* Filters and Search */}
+          <Card className="shadow-lg border-0 mb-6">
+            <CardContent className="p-6">
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <Filter className="h-4 w-4" />
+                  Filters:
+                </div>
+                <Select
+                  value={String(selectedHotel)}
+                  onValueChange={setSelectedHotel}
+                >
+                  <SelectTrigger className="min-w-[200px]">
+                    <Building className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="All Hotels" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all-hotels">All Hotels</SelectItem>
+                    {hotels.map((h) => (
+                      <SelectItem key={h.id} value={String(h.id)}>
+                        {h.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <div className="relative flex-1 min-w-[300px]">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search by guest name, phone, or email..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Reservations Table */}
+          <Card className="shadow-lg border-0">
+            <CardHeader className="border-b border-gray-200 pb-4">
+              <CardTitle className="text-xl font-semibold text-gray-900">
+                All Reservations
+              </CardTitle>
+              <CardDescription>
+                {filteredReservations.length} reservation
+                {filteredReservations.length !== 1 ? "s" : ""} found
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
+            <CardContent className="p-0">
+              <div className="overflow-hidden">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="bg-gray-50">
                     <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Room / Hotel</TableHead>
-                      <TableHead>Guest</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Check-in</TableHead>
-                      <TableHead>Check-out</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead className="font-semibold">Guest</TableHead>
+                      <TableHead className="font-semibold">
+                        Hotel & Room
+                      </TableHead>
+                      <TableHead className="font-semibold">
+                        Stay Duration
+                      </TableHead>
+                      <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold text-right">
+                        Amount
+                      </TableHead>
+                      <TableHead className="font-semibold text-right">
+                        Actions
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loadingReservations ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center">
-                          Loading...
+                        <TableCell colSpan={6} className="text-center py-12">
+                          <div className="flex flex-col items-center justify-center text-gray-500">
+                            <Clock className="h-12 w-12 mb-4 text-gray-300 animate-spin" />
+                            <p className="text-lg font-medium">
+                              Loading reservations...
+                            </p>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ) : reservationError ? (
                       <TableRow>
-                        <TableCell
-                          colSpan={9}
-                          className="text-center text-red-500"
-                        >
-                          {reservationError}
+                        <TableCell colSpan={6} className="text-center py-12">
+                          <div className="flex flex-col items-center justify-center text-red-500">
+                            <AlertTriangle className="h-12 w-12 mb-4" />
+                            <p className="text-lg font-medium">
+                              Error loading reservations
+                            </p>
+                            <p className="text-sm">{reservationError}</p>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ) : filteredReservations.length === 0 ? (
                       <TableRow>
-                        <TableCell
-                          colSpan={9}
-                          className="text-center text-gray-400"
-                        >
-                          No reservations found.
+                        <TableCell colSpan={6} className="text-center py-12">
+                          <div className="flex flex-col items-center justify-center text-gray-500">
+                            <Search className="h-12 w-12 mb-4 text-gray-300" />
+                            <p className="text-lg font-medium mb-2">
+                              No reservations found
+                            </p>
+                            <p className="text-sm">
+                              Try adjusting your search or filters
+                            </p>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredReservations.map((reservation) => (
-                        <TableRow key={reservation.id}>
-                          <TableCell className="font-medium">
-                            {reservation.id}
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-semibold">
-                                {reservation.roomNumber
-                                  ? `Room ${reservation.roomNumber}`
-                                  : reservation.roomType}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {reservation.hotelName || reservation.hotelId}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">
-                                {reservation.guestName || "-"}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {reservation.email}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {reservation.phoneNumber || reservation.guestPhone}
-                          </TableCell>
-                          <TableCell>{reservation.arrivalDate}</TableCell>
-                          <TableCell>{reservation.departureDate}</TableCell>
-                          <TableCell>
-                            <Badge
-                              className={getStatusColor(reservation.status)}
-                            >
-                              {reservation.status.charAt(0).toUpperCase() +
-                                reservation.status.slice(1)}
-                            </Badge>
-                            {reservation.status === "pending" &&
-                              !reservation.rateType && (
-                                <span
-                                  title="Will auto-cancel at 7 PM"
-                                  className="ml-2 text-xs text-yellow-600 flex items-center gap-1"
-                                ></span>
-                              )}
-                            {reservation.status === "no-show" && (
-                              <span className="ml-2 text-xs text-red-600 flex items-center gap-1">
-                                <Key className="inline h-3 w-3" /> No-Show
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell>LKR {reservation.totalAmount}</TableCell>
-                          <TableCell className="space-x-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() =>
-                                handleViewReservationDetail(reservation)
-                              }
-                            >
-                              View
-                            </Button>
+                      filteredReservations.map((reservation) => {
+                        const statusConfig = getStatusConfig(
+                          reservation.status
+                        );
+                        const StatusIcon = statusConfig.icon;
 
-                            {(reservation.status === "confirmed" ||
-                              reservation.status === "pending" ||
-                              reservation.status === "reserved") && (
-                              <>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={() =>
-                                    handleCancelReservation(reservation)
-                                  }
-                                >
-                                  Cancel
-                                </Button>
+                        return (
+                          <TableRow
+                            key={reservation.id}
+                            className="hover:bg-gray-50 transition-colors"
+                          >
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium text-gray-900">
+                                  {reservation.guestName || "-"}
+                                </span>
+                                <div className="flex items-center gap-1 text-sm text-gray-500">
+                                  <Phone className="h-3 w-3" />
+                                  {reservation.phoneNumber ||
+                                    reservation.guestPhone}
+                                </div>
+                                {reservation.email && (
+                                  <div className="flex items-center gap-1 text-sm text-gray-500">
+                                    <Mail className="h-3 w-3" />
+                                    {reservation.email}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium">
+                                  {reservation.hotelName || reservation.hotelId}
+                                </span>
+                                <div className="flex items-center gap-1 text-sm text-gray-600">
+                                  <Bed className="h-3 w-3" />
+                                  {reservation.roomType}
+                                  {reservation.roomNumber &&
+                                    ` • Room ${reservation.roomNumber}`}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-1 text-sm">
+                                  <Calendar className="h-3 w-3" />
+                                  {formatDate(reservation.arrivalDate)}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  to {formatDate(reservation.departureDate)}
+                                </div>
+                                <div className="text-xs text-blue-600 font-medium">
+                                  {reservation.guests}{" "}
+                                  {reservation.guests === 1
+                                    ? "guest"
+                                    : "guests"}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                className={`${statusConfig.color} flex items-center gap-1 w-fit`}
+                              >
+                                <StatusIcon className="h-3 w-3" />
+                                {reservation.status.charAt(0).toUpperCase() +
+                                  reservation.status.slice(1)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="font-bold text-gray-900">
+                                LKR {reservation.totalAmount?.toLocaleString()}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex justify-end gap-2">
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() =>
-                                    handleDeleteReservation(reservation)
+                                    handleViewReservationDetail(reservation)
                                   }
+                                  className="flex items-center gap-1"
                                 >
-                                  Delete
+                                  <Eye className="h-3 w-3" />
+                                  View
                                 </Button>
-                              </>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))
+
+                                {(reservation.status === "confirmed" ||
+                                  reservation.status === "pending" ||
+                                  reservation.status === "reserved") && (
+                                  <>
+                                    {/* <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        handleEditReservation(reservation)
+                                      }
+                                      className="flex items-center gap-1"
+                                    >
+                                      <Edit className="h-3 w-3" />
+                                      Edit
+                                    </Button> */}
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() =>
+                                        handleCancelReservation(reservation)
+                                      }
+                                      className="flex items-center gap-1"
+                                    >
+                                      <Ban className="h-3 w-3" />
+                                      Cancel
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -530,162 +776,360 @@ export default function ClerkReservationsPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
+      </main>
 
       {/* Reservation Details Dialog */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Reservation Details</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Eye className="h-5 w-5 text-blue-600" />
+              Reservation Details
+            </DialogTitle>
+            <DialogDescription>
+              Complete information for reservation #{detailReservation?.id}
+            </DialogDescription>
           </DialogHeader>
-          {detailReservation ? (
-            <div className="space-y-2">
-              <div>
-                <span className="font-bold">Reservation ID:</span>{" "}
-                {detailReservation.id}
+
+          {detailReservation && (
+            <div className="space-y-6">
+              {/* Guest Information Section */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <User className="h-5 w-5 text-blue-600" />
+                  Guest Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Full Name:
+                      </span>
+                      <span className="font-semibold">
+                        {detailReservation.guestName}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Email:
+                      </span>
+                      <span className="font-medium">
+                        {detailReservation.email || "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Phone:
+                      </span>
+                      <span className="font-medium">
+                        {detailReservation.phoneNumber ||
+                          detailReservation.guestPhone}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Number of Guests:
+                      </span>
+                      <span className="font-semibold text-blue-600">
+                        {detailReservation.guests}{" "}
+                        {detailReservation.guests === 1 ? "guest" : "guests"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="font-bold">Hotel:</span>{" "}
-                {detailReservation.hotelName || detailReservation.hotelId}
+
+              {/* Stay Information Section */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-green-600" />
+                  Stay Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Arrival Date:
+                      </span>
+                      <span className="font-medium">
+                        {formatDate(detailReservation.arrivalDate)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Departure Date:
+                      </span>
+                      <span className="font-medium">
+                        {formatDate(detailReservation.departureDate)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Status:
+                      </span>
+                      {(() => {
+                        const statusConfig = getStatusConfig(
+                          detailReservation.status
+                        );
+                        const StatusIcon = statusConfig.icon;
+                        return (
+                          <Badge
+                            className={`${statusConfig.color} flex items-center gap-1`}
+                          >
+                            <StatusIcon className="h-3 w-3" />
+                            {detailReservation.status.charAt(0).toUpperCase() +
+                              detailReservation.status.slice(1)}
+                          </Badge>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="font-bold">Guest:</span>{" "}
-                {detailReservation.guestName}
+
+              {/* Accommodation Details Section */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Bed className="h-5 w-5 text-purple-600" />
+                  Accommodation Details
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Hotel:
+                      </span>
+                      <span className="font-medium flex items-center gap-1">
+                        <MapPin className="h-4 w-4 text-red-500" />
+                        {detailReservation.hotelName ||
+                          detailReservation.hotelId}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Room Type:
+                      </span>
+                      <span className="font-medium">
+                        {detailReservation.roomType}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Room Number:
+                      </span>
+                      <span className="font-semibold">
+                        {detailReservation.roomNumber ? (
+                          <span className="text-blue-600">
+                            Room {detailReservation.roomNumber}
+                          </span>
+                        ) : (
+                          <span className="text-amber-600">Unassigned</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="font-bold">Email:</span>{" "}
-                {detailReservation.email}
+
+              {/* Payment Information Section */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-green-600" />
+                  Payment Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Total Amount:
+                      </span>
+                      <span className="font-bold text-lg text-green-600">
+                        LKR {detailReservation.totalAmount?.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-600">
+                        Rate Type:
+                      </span>
+                      <span className="font-medium capitalize">
+                        {detailReservation.rateType || "nightly"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="font-bold">Phone:</span>{" "}
-                {detailReservation.phoneNumber || detailReservation.guestPhone}
+
+              {/* Timeline Section */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-gray-600" />
+                  Reservation Timeline
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-600">
+                      Created:
+                    </span>
+                    <span className="text-sm font-medium">
+                      {formatDateTime(detailReservation.createdAt)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-600">
+                      Last Updated:
+                    </span>
+                    <span className="text-sm font-medium">
+                      {formatDateTime(detailReservation.updatedAt)}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="font-bold">Room:</span>{" "}
-                {detailReservation.roomNumber
-                  ? `${detailReservation.roomNumber} (${detailReservation.roomType})`
-                  : detailReservation.roomType}
-              </div>
-              <div>
-                <span className="font-bold">Guests:</span>{" "}
-                {detailReservation.guests}
-              </div>
-              <div>
-                <span className="font-bold">Check-in:</span>{" "}
-                {detailReservation.arrivalDate}
-              </div>
-              <div>
-                <span className="font-bold">Check-out:</span>{" "}
-                {detailReservation.departureDate}
-              </div>
-              <div>
-                <span className="font-bold">Status:</span>{" "}
-                <Badge className={getStatusColor(detailReservation.status)}>
-                  {detailReservation.status.charAt(0).toUpperCase() +
-                    detailReservation.status.slice(1)}
-                </Badge>
-              </div>
-              <div>
-                <span className="font-bold">Total:</span> LKR{" "}
-                {detailReservation.totalAmount}
-              </div>
-              <div>
-                <span className="font-bold">Created At:</span>{" "}
-                {new Date(detailReservation.createdAt).toLocaleString()}
-              </div>
-              <div>
-                <span className="font-bold">Updated At:</span>{" "}
-                {new Date(detailReservation.updatedAt).toLocaleString()}
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDetailDialog(false)}
+                  className="flex items-center gap-2"
+                >
+                  <X className="h-4 w-4" />
+                  Close
+                </Button>
               </div>
             </div>
-          ) : (
-            <div>Loading...</div>
           )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowDetailDialog(false)}
-            >
-              Close
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Edit Reservation Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit Reservation</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Edit className="h-5 w-5 text-blue-600" />
+              Edit Reservation
+            </DialogTitle>
+            <DialogDescription>
+              Update reservation details for {editingReservation?.guestName}
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label>Guest Name*</Label>
-            <Input
-              value={reservationForm.guestName}
-              onChange={(e) =>
-                handleReservationFormChange("guestName", e.target.value)
-              }
-            />
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={reservationForm.email}
-              onChange={(e) =>
-                handleReservationFormChange("email", e.target.value)
-              }
-            />
-            <Label>Phone Number*</Label>
-            <Input
-              value={reservationForm.phoneNumber}
-              onChange={(e) =>
-                handleReservationFormChange("phoneNumber", e.target.value)
-              }
-              placeholder="e.g. 555-123-4567"
-            />
-            <Label>Room Type*</Label>
-            <Input
-              value={reservationForm.roomType}
-              onChange={(e) =>
-                handleReservationFormChange("roomType", e.target.value)
-              }
-              placeholder="e.g. Deluxe"
-            />
-            <Label>Room Number</Label>
-            <Input
-              value={reservationForm.roomNumber}
-              onChange={(e) =>
-                handleReservationFormChange("roomNumber", e.target.value)
-              }
-              placeholder="e.g. 102"
-            />
-            <Label>Guests</Label>
-            <Input
-              type="number"
-              min={1}
-              value={reservationForm.guests}
-              onChange={(e) =>
-                handleReservationFormChange("guests", e.target.value)
-              }
-            />
-            <Label>Arrival Date*</Label>
-            <Input
-              type="date"
-              value={reservationForm.arrivalDate}
-              onChange={(e) =>
-                handleReservationFormChange("arrivalDate", e.target.value)
-              }
-            />
-            <Label>Departure Date*</Label>
-            <Input
-              type="date"
-              value={reservationForm.departureDate}
-              onChange={(e) =>
-                handleReservationFormChange("departureDate", e.target.value)
-              }
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto">
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium">Guest Name *</Label>
+                <Input
+                  value={reservationForm.guestName}
+                  onChange={(e) =>
+                    handleReservationFormChange("guestName", e.target.value)
+                  }
+                  placeholder="Enter guest full name"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">Email</Label>
+                <Input
+                  type="email"
+                  value={reservationForm.email}
+                  onChange={(e) =>
+                    handleReservationFormChange("email", e.target.value)
+                  }
+                  placeholder="guest@example.com"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">Phone Number *</Label>
+                <Input
+                  value={reservationForm.phoneNumber}
+                  onChange={(e) =>
+                    handleReservationFormChange("phoneNumber", e.target.value)
+                  }
+                  placeholder="+1 (555) 000-0000"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">Number of Guests</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={reservationForm.guests}
+                  onChange={(e) =>
+                    handleReservationFormChange("guests", e.target.value)
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium">Room Type *</Label>
+                <Input
+                  value={reservationForm.roomType}
+                  onChange={(e) =>
+                    handleReservationFormChange("roomType", e.target.value)
+                  }
+                  placeholder="e.g., Deluxe Suite"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">Room Number</Label>
+                <Input
+                  value={reservationForm.roomNumber}
+                  onChange={(e) =>
+                    handleReservationFormChange("roomNumber", e.target.value)
+                  }
+                  placeholder="e.g., 201"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm font-medium">Arrival Date *</Label>
+                  <Input
+                    type="date"
+                    value={reservationForm.arrivalDate}
+                    onChange={(e) =>
+                      handleReservationFormChange("arrivalDate", e.target.value)
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">
+                    Departure Date *
+                  </Label>
+                  <Input
+                    type="date"
+                    value={reservationForm.departureDate}
+                    onChange={(e) =>
+                      handleReservationFormChange(
+                        "departureDate",
+                        e.target.value
+                      )
+                    }
+                  />
+                </div>
+              </div>
+            </div>
           </div>
           <DialogFooter>
-            <Button onClick={handleSaveEditReservation}>Save Changes</Button>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEditReservation}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -694,22 +1138,39 @@ export default function ClerkReservationsPage() {
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Cancel Reservation</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+              Cancel Reservation
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. The reservation will be marked as
+              cancelled.
+            </DialogDescription>
           </DialogHeader>
-          <p>
-            Are you sure you want to cancel reservation{" "}
-            <span className="font-bold">{cancelTarget?.id}</span> for{" "}
-            {cancelTarget?.guestName}?
-          </p>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-amber-900">
+                  Cancellation Warning
+                </h4>
+                <p className="text-sm text-amber-700 mt-1">
+                  Are you sure you want to cancel reservation{" "}
+                  <span className="font-bold">#{cancelTarget?.id}</span> for{" "}
+                  <span className="font-bold">{cancelTarget?.guestName}</span>?
+                </p>
+              </div>
+            </div>
+          </div>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setShowCancelDialog(false)}
             >
-              No
+              Keep Reservation
             </Button>
             <Button variant="destructive" onClick={doCancelReservation}>
-              Yes, Cancel
+              Confirm Cancellation
             </Button>
           </DialogFooter>
         </DialogContent>

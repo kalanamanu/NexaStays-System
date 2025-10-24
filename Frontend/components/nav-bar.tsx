@@ -12,7 +12,7 @@ import UserMenu from "@/components/ui/UserMenu";
 
 /**
  * NavBar
- * - For "Travel Company" and "Clerk" users: hide main nav links and disable home link
+ * - For "Travel Company", "Clerk" and "Manager" users: hide main nav links and disable home link
  * - For all others: show normal nav
  *
  * Save this file as: components/nav-bar.tsx
@@ -35,9 +35,12 @@ export default function NavBar() {
     { href: "/contact", label: "Contact Us" },
   ];
 
-  // Check if the user is Travel Company or Clerk
+  // Check if the user is Travel Company, Clerk, or Manager
   const userRole = user?.role?.toLowerCase();
-  const hideNav = userRole === "travel-company" || userRole === "clerk";
+  const hideNav =
+    userRole === "travel-company" ||
+    userRole === "clerk" ||
+    userRole === "manager";
 
   if (!mounted) return null;
 

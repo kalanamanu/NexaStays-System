@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import NavBar from "@/components/nav-bar";
+import ClerkSidebar from "@/components/ui/ClerkSidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +21,6 @@ import { useToast } from "@/hooks/use-toast";
 // For PDF generation
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-// Import types for jsPDF autoTable
 import type { UserOptions } from "jspdf-autotable";
 
 // Extend jsPDF type to include autoTable
@@ -141,7 +141,6 @@ export default function ClerkCheckoutDetailPage() {
           setBill((prev) => ({
             ...prev,
             roomCharges: reservationData.totalAmount,
-            // everything else is 0 by default
           }));
         }
       } catch (err) {
@@ -235,7 +234,7 @@ export default function ClerkCheckoutDetailPage() {
           },
           body: JSON.stringify({
             reservationId: reservation?.id,
-            roomId: reservation?.roomId, // <-- pass the roomId here!
+            roomId: reservation?.roomId,
             paymentMethod,
             bill,
           }),
@@ -251,8 +250,6 @@ export default function ClerkCheckoutDetailPage() {
         title: "Check-out Successful",
         description: "Guest has been checked out and receipt generated.",
       });
-      // Optionally, refetch reservation to update status
-      // or redirect after a delay
     } catch (error: any) {
       toast({
         title: "Error",
@@ -333,10 +330,26 @@ export default function ClerkCheckoutDetailPage() {
   };
 
   if (loading) {
-    return <div className="p-8">Loading reservation...</div>;
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+        <NavBar />
+        <ClerkSidebar />
+        <main className="ml-60 pt-16 min-h-screen overflow-y-auto">
+          <div className="p-8">Loading reservation...</div>
+        </main>
+      </div>
+    );
   }
   if (!reservation) {
-    return <div className="p-8">Reservation not found.</div>;
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+        <NavBar />
+        <ClerkSidebar />
+        <main className="ml-60 pt-16 min-h-screen overflow-y-auto">
+          <div className="p-8">Reservation not found.</div>
+        </main>
+      </div>
+    );
   }
 
   const isCheckedIn = reservation.status === "checked-in";
@@ -345,324 +358,330 @@ export default function ClerkCheckoutDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
       <NavBar />
-      <div className="max-w-3xl mx-auto py-8 px-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Reservation Check-Out</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-6 space-y-2">
-              <div>
-                <span className="font-bold">Reservation ID:</span>{" "}
-                {reservation.id}
+      <ClerkSidebar />
+      <main className="ml-60 pt-16 min-h-screen overflow-y-auto">
+        <div className="max-w-3xl mx-auto py-8 px-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Reservation Check-Out</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-6 space-y-2">
+                <div>
+                  <span className="font-bold">Reservation ID:</span>{" "}
+                  {reservation.id}
+                </div>
+                <div>
+                  <span className="font-bold">Guest:</span>{" "}
+                  {reservation.guestName}
+                </div>
+                <div>
+                  <span className="font-bold">Email:</span>{" "}
+                  {reservation.guestEmail}
+                </div>
+                <div>
+                  <span className="font-bold">Phone:</span>{" "}
+                  {reservation.guestPhone}
+                </div>
+                <div>
+                  <span className="font-bold">Hotel:</span>{" "}
+                  {reservation.hotelName}
+                </div>
+                <div>
+                  <span className="font-bold">Room Type:</span>{" "}
+                  {reservation.roomType}
+                </div>
+                <div>
+                  <span className="font-bold">Room Number:</span>{" "}
+                  {reservation.roomNumber}
+                </div>
+                <div>
+                  <span className="font-bold">Dates:</span>{" "}
+                  {reservation.arrivalDate
+                    ? new Date(reservation.arrivalDate).toLocaleDateString()
+                    : "-"}
+                  {" to "}
+                  {reservation.departureDate
+                    ? new Date(reservation.departureDate).toLocaleDateString()
+                    : "-"}
+                </div>
+                <div>
+                  <span className="font-bold">Guests:</span>{" "}
+                  {reservation.guests}
+                </div>
+                <div>
+                  <span className="font-bold">Status:</span>{" "}
+                  <Badge>
+                    {reservation.status.charAt(0).toUpperCase() +
+                      reservation.status.slice(1)}
+                  </Badge>
+                </div>
               </div>
-              <div>
-                <span className="font-bold">Guest:</span>{" "}
-                {reservation.guestName}
-              </div>
-              <div>
-                <span className="font-bold">Email:</span>{" "}
-                {reservation.guestEmail}
-              </div>
-              <div>
-                <span className="font-bold">Phone:</span>{" "}
-                {reservation.guestPhone}
-              </div>
-              <div>
-                <span className="font-bold">Hotel:</span>{" "}
-                {reservation.hotelName}
-              </div>
-              <div>
-                <span className="font-bold">Room Type:</span>{" "}
-                {reservation.roomType}
-              </div>
-              <div>
-                <span className="font-bold">Room Number:</span>{" "}
-                {reservation.roomNumber}
-              </div>
-              <div>
-                <span className="font-bold">Dates:</span>{" "}
-                {reservation.arrivalDate
-                  ? new Date(reservation.arrivalDate).toLocaleDateString()
-                  : "-"}
-                {" to "}
-                {reservation.departureDate
-                  ? new Date(reservation.departureDate).toLocaleDateString()
-                  : "-"}
-              </div>
-              <div>
-                <span className="font-bold">Guests:</span> {reservation.guests}
-              </div>
-              <div>
-                <span className="font-bold">Status:</span>{" "}
-                <Badge>
-                  {reservation.status.charAt(0).toUpperCase() +
-                    reservation.status.slice(1)}
-                </Badge>
-              </div>
-            </div>
 
-            <Separator className="my-4" />
+              <Separator className="my-4" />
 
-            {/* Bill section */}
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold mb-2">Check-Out Bill</h3>
-              {daysLate > 0 && (
-                <div className="text-xs text-yellow-700 flex justify-end mb-2">
-                  <span>
-                    <b>Note:</b> Guest is checking out {daysLate} day
-                    {daysLate > 1 ? "s" : ""} late. Extra charge: LKR{" "}
-                    {daysLate * nightly}
-                  </span>
-                </div>
-              )}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label>Room Charges</Label>
-                  <Input
-                    type="number"
-                    disabled
-                    value={bill.roomCharges}
-                    className="w-32"
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <Label>Restaurant</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={bill.restaurant}
-                    onChange={(e) =>
-                      handleBillChange("restaurant", Number(e.target.value))
-                    }
-                    className="w-32"
-                    disabled={isCheckedOut}
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <Label>Room Service</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={bill.roomService}
-                    onChange={(e) =>
-                      handleBillChange("roomService", Number(e.target.value))
-                    }
-                    className="w-32"
-                    disabled={isCheckedOut}
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <Label>Laundry</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={bill.laundry}
-                    onChange={(e) =>
-                      handleBillChange("laundry", Number(e.target.value))
-                    }
-                    className="w-32"
-                    disabled={isCheckedOut}
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <Label>Telephone</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={bill.telephone}
-                    onChange={(e) =>
-                      handleBillChange("telephone", Number(e.target.value))
-                    }
-                    className="w-32"
-                    disabled={isCheckedOut}
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <Label>Club</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={bill.club}
-                    onChange={(e) =>
-                      handleBillChange("club", Number(e.target.value))
-                    }
-                    className="w-32"
-                    disabled={isCheckedOut}
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <Label>Other</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={bill.other}
-                    onChange={(e) =>
-                      handleBillChange("other", Number(e.target.value))
-                    }
-                    className="w-32"
-                    disabled={isCheckedOut}
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <Label>
-                    Late Checkout{" "}
-                    {lateCheckoutDisplay && (
-                      <span className="text-xs text-gray-500 ml-2">
-                        {lateCheckoutDisplay}
-                      </span>
-                    )}
-                  </Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={bill.lateCheckout}
-                    disabled
-                    className="w-32"
-                  />
-                </div>
-                <Separator />
-                <div className="flex justify-between items-center font-bold text-lg">
-                  <span>Total</span>
-                  <span>LKR {bill.total}</span>
-                </div>
-              </div>
-            </div>
-            {/* Payment, only if not already checked-out */}
-            {isCheckedIn && (
+              {/* Bill section */}
               <div className="mb-4">
-                <Label>Payment Method</Label>
-                <select
-                  className="w-48 ml-4 border rounded p-2"
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  disabled={isCheckedOut}
-                >
-                  <option value="">Select...</option>
-                  <option value="cash">Cash</option>
-                  <option value="credit">Credit Card</option>
-                  <option value="debit">Debit Card</option>
-                </select>
-              </div>
-            )}
-            {/* Checkout button */}
-            {isCheckedIn && (
-              <Button
-                className="w-full mt-2"
-                onClick={() => {
-                  setReceiptMode("final");
-                  setShowReceiptDialog(true);
-                  handleCheckOut();
-                }}
-                disabled={processing || !paymentMethod}
-              >
-                {processing ? "Processing..." : "Process Check-Out"}
-              </Button>
-            )}
-            {isCheckedOut && (
-              <div className="text-center my-4">
-                <Badge className="bg-green-100 text-green-800">
-                  Checked-Out
-                </Badge>
-              </div>
-            )}
-            {/* Show receipt dialog after check-out or on demand */}
-            <Dialog
-              open={showReceiptDialog}
-              onOpenChange={setShowReceiptDialog}
-            >
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Receipt</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-2">
-                  <div className="font-bold text-center text-lg">
-                    Nexa Stays
-                  </div>
-                  <Separator />
-                  <div>
-                    <span className="font-bold">Guest:</span>{" "}
-                    {reservation.guestName}
-                  </div>
-                  <div>
-                    <span className="font-bold">Room:</span>{" "}
-                    {reservation.roomNumber} ({reservation.roomType})
-                  </div>
-                  <div>
-                    <span className="font-bold">Dates:</span>{" "}
-                    {reservation.arrivalDate
-                      ? new Date(reservation.arrivalDate).toLocaleDateString()
-                      : "-"}{" "}
-                    to{" "}
-                    {reservation.departureDate
-                      ? new Date(reservation.departureDate).toLocaleDateString()
-                      : "-"}
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between">
-                    <span>Room Charges</span>
-                    <span>LKR {bill.roomCharges}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Restaurant</span>
-                    <span>LKR {bill.restaurant}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Room Service</span>
-                    <span>LKR {bill.roomService}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Laundry</span>
-                    <span>LKR {bill.laundry}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Telephone</span>
-                    <span>LKR {bill.telephone}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Club</span>
-                    <span>LKR {bill.club}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Other</span>
-                    <span>LKR {bill.other}</span>
-                  </div>
-                  <div className="flex justify-between">
+                <h3 className="text-lg font-semibold mb-2">Check-Out Bill</h3>
+                {daysLate > 0 && (
+                  <div className="text-xs text-yellow-700 flex justify-end mb-2">
                     <span>
+                      <b>Note:</b> Guest is checking out {daysLate} day
+                      {daysLate > 1 ? "s" : ""} late. Extra charge: LKR{" "}
+                      {daysLate * nightly}
+                    </span>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label>Room Charges</Label>
+                    <Input
+                      type="number"
+                      disabled
+                      value={bill.roomCharges}
+                      className="w-32"
+                    />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <Label>Restaurant</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={bill.restaurant}
+                      onChange={(e) =>
+                        handleBillChange("restaurant", Number(e.target.value))
+                      }
+                      className="w-32"
+                      disabled={isCheckedOut}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <Label>Room Service</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={bill.roomService}
+                      onChange={(e) =>
+                        handleBillChange("roomService", Number(e.target.value))
+                      }
+                      className="w-32"
+                      disabled={isCheckedOut}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <Label>Laundry</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={bill.laundry}
+                      onChange={(e) =>
+                        handleBillChange("laundry", Number(e.target.value))
+                      }
+                      className="w-32"
+                      disabled={isCheckedOut}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <Label>Telephone</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={bill.telephone}
+                      onChange={(e) =>
+                        handleBillChange("telephone", Number(e.target.value))
+                      }
+                      className="w-32"
+                      disabled={isCheckedOut}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <Label>Club</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={bill.club}
+                      onChange={(e) =>
+                        handleBillChange("club", Number(e.target.value))
+                      }
+                      className="w-32"
+                      disabled={isCheckedOut}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <Label>Other</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={bill.other}
+                      onChange={(e) =>
+                        handleBillChange("other", Number(e.target.value))
+                      }
+                      className="w-32"
+                      disabled={isCheckedOut}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <Label>
                       Late Checkout{" "}
                       {lateCheckoutDisplay && (
-                        <span className="text-xs text-gray-500 ml-1">
+                        <span className="text-xs text-gray-500 ml-2">
                           {lateCheckoutDisplay}
                         </span>
                       )}
-                    </span>
-                    <span>LKR {bill.lateCheckout}</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={bill.lateCheckout}
+                      disabled
+                      className="w-32"
+                    />
                   </div>
                   <Separator />
-                  <div className="flex justify-between font-bold text-lg">
+                  <div className="flex justify-between items-center font-bold text-lg">
                     <span>Total</span>
                     <span>LKR {bill.total}</span>
                   </div>
                 </div>
-                <DialogFooter>
-                  <Button onClick={handlePrint} variant="outline">
-                    Print Receipt
-                  </Button>
-                  <Button onClick={handleDownloadPDF} variant="outline">
-                    Download PDF
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowReceiptDialog(false)}
+              </div>
+              {/* Payment, only if not already checked-out */}
+              {isCheckedIn && (
+                <div className="mb-4">
+                  <Label>Payment Method</Label>
+                  <select
+                    className="w-48 ml-4 border rounded p-2"
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    disabled={isCheckedOut}
                   >
-                    Close
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </CardContent>
-        </Card>
-      </div>
+                    <option value="">Select...</option>
+                    <option value="cash">Cash</option>
+                    <option value="credit">Credit Card</option>
+                    <option value="debit">Debit Card</option>
+                  </select>
+                </div>
+              )}
+              {/* Checkout button */}
+              {isCheckedIn && (
+                <Button
+                  className="w-full mt-2"
+                  onClick={() => {
+                    setReceiptMode("final");
+                    setShowReceiptDialog(true);
+                    handleCheckOut();
+                  }}
+                  disabled={processing || !paymentMethod}
+                >
+                  {processing ? "Processing..." : "Process Check-Out"}
+                </Button>
+              )}
+              {isCheckedOut && (
+                <div className="text-center my-4">
+                  <Badge className="bg-green-100 text-green-800">
+                    Checked-Out
+                  </Badge>
+                </div>
+              )}
+              {/* Show receipt dialog after check-out or on demand */}
+              <Dialog
+                open={showReceiptDialog}
+                onOpenChange={setShowReceiptDialog}
+              >
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Receipt</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-2">
+                    <div className="font-bold text-center text-lg">
+                      Nexa Stays
+                    </div>
+                    <Separator />
+                    <div>
+                      <span className="font-bold">Guest:</span>{" "}
+                      {reservation.guestName}
+                    </div>
+                    <div>
+                      <span className="font-bold">Room:</span>{" "}
+                      {reservation.roomNumber} ({reservation.roomType})
+                    </div>
+                    <div>
+                      <span className="font-bold">Dates:</span>{" "}
+                      {reservation.arrivalDate
+                        ? new Date(reservation.arrivalDate).toLocaleDateString()
+                        : "-"}{" "}
+                      to{" "}
+                      {reservation.departureDate
+                        ? new Date(
+                            reservation.departureDate
+                          ).toLocaleDateString()
+                        : "-"}
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between">
+                      <span>Room Charges</span>
+                      <span>LKR {bill.roomCharges}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Restaurant</span>
+                      <span>LKR {bill.restaurant}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Room Service</span>
+                      <span>LKR {bill.roomService}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Laundry</span>
+                      <span>LKR {bill.laundry}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Telephone</span>
+                      <span>LKR {bill.telephone}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Club</span>
+                      <span>LKR {bill.club}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Other</span>
+                      <span>LKR {bill.other}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>
+                        Late Checkout{" "}
+                        {lateCheckoutDisplay && (
+                          <span className="text-xs text-gray-500 ml-1">
+                            {lateCheckoutDisplay}
+                          </span>
+                        )}
+                      </span>
+                      <span>LKR {bill.lateCheckout}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between font-bold text-lg">
+                      <span>Total</span>
+                      <span>LKR {bill.total}</span>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button onClick={handlePrint} variant="outline">
+                      Print Receipt
+                    </Button>
+                    <Button onClick={handleDownloadPDF} variant="outline">
+                      Download PDF
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowReceiptDialog(false)}
+                    >
+                      Close
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
     </div>
   );
 }
