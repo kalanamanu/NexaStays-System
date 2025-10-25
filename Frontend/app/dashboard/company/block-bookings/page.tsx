@@ -356,7 +356,7 @@ export default function TravelCompanyDashboard() {
                   Start by creating your first block booking to manage group
                   reservations efficiently.
                 </p>
-                <Button
+                {/* <Button
                   className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
                   onClick={() =>
                     router.push("/dashboard/company/block-bookings/create")
@@ -364,7 +364,7 @@ export default function TravelCompanyDashboard() {
                 >
                   <Plus className="h-4 w-4" />
                   Create Your First Block Booking
-                </Button>
+                </Button> */}
               </div>
             ) : (
               <div className="divide-y divide-gray-200">

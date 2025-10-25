@@ -236,7 +236,7 @@ export default function AboutPage() {
                   Want to partner or learn more?
                 </h3>
                 <p className="mt-2 text-white/90 max-w-xl">
-                  Reach out — whether you're a traveler, hotel operator or
+                  Reach out - whether you're a traveler, hotel operator or
                   partner, we’d love to talk.
                 </p>
               </div>
@@ -248,11 +248,11 @@ export default function AboutPage() {
                   </Button>
                 </Link>
                 <a
-                  href="mailto:hello@nexastays.example"
+                  href="mailto:hello@nexastays.com"
                   className="flex items-center gap-2 text-white/90 hover:underline"
                 >
                   <Mail className="h-5 w-5" />
-                  hello@nexastays.example
+                  hello@nexastays.com
                 </a>
               </div>
             </div>
