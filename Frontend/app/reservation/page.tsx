@@ -46,27 +46,12 @@ const ReservationPaymentForm = dynamic(
   { ssr: false }
 );
 
-const RESIDENTIAL_WEEKLY_RATE = 1200;
-const RESIDENTIAL_MONTHLY_RATE = 3500;
-
 function getNights(arrival?: Date, departure?: Date) {
   if (!arrival || !departure) return 1;
   const nights = Math.ceil(
     (departure.getTime() - arrival.getTime()) / (1000 * 60 * 60 * 24)
   );
   return Math.max(nights, 1);
-}
-
-function getResidentialDeparture(
-  arrival: Date | undefined,
-  durationType: "week" | "month" | "",
-  durationCount: number
-) {
-  if (!arrival || !durationType || durationCount <= 0) return undefined;
-  const d = new Date(arrival);
-  if (durationType === "week") d.setDate(d.getDate() + durationCount * 7);
-  else if (durationType === "month") d.setMonth(d.getMonth() + durationCount);
-  return d;
 }
 
 // --- NEW: Utility for localStorage user details ---
@@ -100,6 +85,10 @@ export default function ReservationPage() {
     const first = roomsParam.split(",")[0]?.split(":")[0];
     initialRoomType = first ? decodeURIComponent(first).toLowerCase() : "";
   }
+
+  // Check if initial param requests "residential suite"
+  const initialTab =
+    initialRoomType === "residential suite" ? "residential" : "hotel";
 
   // Fetch all hotels for dropdown
   const { data: hotelsData, isLoading: hotelsLoading } = useSWR(
@@ -148,12 +137,20 @@ export default function ReservationPage() {
   });
 
   // Single room selection states
-  const [selectedRoomType, setSelectedRoomType] =
-    useState<string>(initialRoomType);
+  const [selectedRoomType, setSelectedRoomType] = useState<string>(
+    initialRoomType !== "residential suite" ? initialRoomType : ""
+  );
   const [selectedRoomId, setSelectedRoomId] = useState<string>("");
+
+  // For residential suite tab
+  const [selectedResidentialRoomId, setSelectedResidentialRoomId] =
+    useState<string>("");
 
   // Track if autofill from params has happened, so it only happens once per hotel selection
   const [didAutoFill, setDidAutoFill] = useState(false);
+
+  // Track tab state, if initial param requests residential suite, set tab to "residential"
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   // On hotels load, set dropdown and forms from param or default, including userDetails from localStorage
   useEffect(() => {
@@ -221,7 +218,34 @@ export default function ReservationPage() {
     [selectedHotelDetails]
   );
 
-  // Detailed info for available room types for selected hotel
+  // --- Residential Suite Room Detection & Pricing ---
+  const residentialSuites = useMemo(() => {
+    if (!availableRooms) return [];
+    return availableRooms.filter(
+      (room: any) =>
+        room.type && room.type.toLowerCase() === "residential suite"
+    );
+  }, [availableRooms]);
+
+  // Only show Residential tab as enabled if we have at least one residential suite room
+  const hasResidentialSuite = residentialSuites.length > 0;
+
+  // Get price for residential suite (lowest price if multiple rooms)
+  const residentialSuitePrice =
+    residentialSuites.length > 0
+      ? Math.min(...residentialSuites.map((r: any) => r.pricePerNight || 0))
+      : 0;
+
+  // For residential form, pick a room id (first available or selected)
+  useEffect(() => {
+    if (residentialSuites.length > 0) {
+      setSelectedResidentialRoomId(residentialSuites[0]?.id?.toString() || "");
+    } else {
+      setSelectedResidentialRoomId("");
+    }
+  }, [selectedHotelId, residentialSuites.length]);
+
+  // Filter "residential suite" out of hotel room dropdown
   const availableRoomTypeDetails = useMemo(() => {
     const typeMap: {
       [type: string]: {
@@ -233,7 +257,7 @@ export default function ReservationPage() {
     } = {};
     for (const r of availableRooms) {
       const type = (r.type || "").toLowerCase();
-      if (!type) continue;
+      if (!type || type === "residential suite") continue; // Filter out residential suite
       if (!typeMap[type]) {
         typeMap[type] = {
           type,
@@ -257,14 +281,11 @@ export default function ReservationPage() {
 
   // Autofill selectedRoomType and selectedRoomId on load
   useEffect(() => {
-    // If there are room types available
     if (availableRoomTypeDetails.length > 0) {
-      // If nothing selected or current selection is not valid
       if (
         !selectedRoomType ||
         !availableRoomTypeDetails.find((t) => t.type === selectedRoomType)
       ) {
-        // Try to use initialRoomType from URL params if it's valid
         const foundFromParam =
           initialRoomType &&
           availableRoomTypeDetails.find((t) => t.type === initialRoomType);
@@ -274,7 +295,6 @@ export default function ReservationPage() {
           setSelectedRoomId(firstRoom ? firstRoom.id.toString() : "");
           return;
         } else {
-          // Default to first available type
           setSelectedRoomType(availableRoomTypeDetails[0].type);
           const firstRoom = availableRoomTypeDetails[0].rooms?.[0];
           setSelectedRoomId(firstRoom ? firstRoom.id.toString() : "");
@@ -282,7 +302,6 @@ export default function ReservationPage() {
         }
       }
 
-      // If a room type is selected, but selectedRoomId is not valid, reset to first available
       const foundType = availableRoomTypeDetails.find(
         (t) => t.type === selectedRoomType
       );
@@ -296,6 +315,11 @@ export default function ReservationPage() {
     }
     // eslint-disable-next-line
   }, [availableRoomTypeDetails, selectedRoomType, selectedRoomId]);
+
+  // If param is residential suite, switch tab on mount
+  useEffect(() => {
+    if (initialRoomType === "residential suite") setActiveTab("residential");
+  }, [initialRoomType]);
 
   useEffect(() => {
     function handleRefill() {
@@ -353,7 +377,6 @@ export default function ReservationPage() {
   const [showPayment, setShowPayment] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [reservationId, setReservationId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState("hotel");
   const router = useRouter();
   const { toast } = useToast();
 
@@ -363,16 +386,35 @@ export default function ReservationPage() {
   );
   const totalAmount = selectedTypeInfo ? selectedTypeInfo.price * nights : 0;
 
+  // --- Residential pricing logic: Use hotel's suite price ---
+  const getResidentialDeparture = (
+    arrival: Date | undefined,
+    durationType: "week" | "month" | "",
+    durationCount: number
+  ) => {
+    if (!arrival || !durationType || durationCount <= 0) return undefined;
+    const d = new Date(arrival);
+    if (durationType === "week") d.setDate(d.getDate() + durationCount * 7);
+    else if (durationType === "month") d.setMonth(d.getMonth() + durationCount);
+    return d;
+  };
+
   const resDepartureDate = getResidentialDeparture(
     residentialForm.arrivalDate,
     residentialForm.durationType,
     residentialForm.durationCount
   );
+
+  // Use the price from the selected hotel's residential suite
   let residentialTotal = 0;
-  if (residentialForm.durationType === "week") {
-    residentialTotal = RESIDENTIAL_WEEKLY_RATE * residentialForm.durationCount;
-  } else if (residentialForm.durationType === "month") {
-    residentialTotal = RESIDENTIAL_MONTHLY_RATE * residentialForm.durationCount;
+  if (hasResidentialSuite) {
+    if (residentialForm.durationType === "week") {
+      residentialTotal =
+        residentialSuitePrice * 7 * residentialForm.durationCount;
+    } else if (residentialForm.durationType === "month") {
+      residentialTotal =
+        residentialSuitePrice * 30 * residentialForm.durationCount;
+    }
   }
 
   const validateForm = () => {
@@ -419,7 +461,6 @@ export default function ReservationPage() {
   // --- Save details to localStorage after submit ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("SUBMIT FIRED");
     if (!validateForm()) {
       return;
     }
@@ -456,7 +497,6 @@ export default function ReservationPage() {
         body: JSON.stringify(reqBody),
       });
 
-      // Defensive: check for network errors before .json()
       if (!res.ok) {
         let errMsg = "Failed to make reservation";
         try {
@@ -474,7 +514,6 @@ export default function ReservationPage() {
         setReservationId(null);
       }
 
-      // Save user details to localStorage
       localStorage.setItem("fullName", formData.fullName);
       localStorage.setItem("email", formData.email);
       localStorage.setItem("phone", formData.phone);
@@ -513,16 +552,27 @@ export default function ReservationPage() {
     if (!validateResidential()) return;
     setIsLoading(true);
 
-    const selectedRoomObj = (
-      availableRoomTypeDetails.find((t) => t.type === selectedRoomType)
-        ?.rooms ?? []
-    ).find((room) => room.id.toString() === selectedRoomId);
+    // Use selectedResidentialRoomId for residential suite booking
+    interface ResidentialSuiteRoom {
+      id: string | number;
+      type: string;
+      pricePerNight: number;
+      number: string | number;
+      status?: string;
+      [key: string]: any;
+    }
+
+    const selectedRoomObj: ResidentialSuiteRoom | undefined =
+      residentialSuites.find(
+        (room: ResidentialSuiteRoom) =>
+          room.id.toString() === selectedResidentialRoomId
+      );
 
     try {
       const reqBody = {
         hotelId: residentialForm.hotelId,
-        roomType: "residential",
-        roomIds: [selectedRoomId],
+        roomType: "residential suite",
+        roomIds: [selectedResidentialRoomId],
         roomNumber: selectedRoomObj?.number || "",
         durationType: residentialForm.durationType,
         durationCount: residentialForm.durationCount,
@@ -543,7 +593,7 @@ export default function ReservationPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify(reqBody),
         }
@@ -646,7 +696,16 @@ export default function ReservationPage() {
                     <TabsTrigger value="hotel" className="w-1/2">
                       Hotel Room
                     </TabsTrigger>
-                    <TabsTrigger value="residential" className="w-1/2">
+                    <TabsTrigger
+                      value="residential"
+                      className={
+                        "w-1/2 " +
+                        (!hasResidentialSuite
+                          ? "opacity-50 pointer-events-none cursor-not-allowed"
+                          : "")
+                      }
+                      disabled={!hasResidentialSuite}
+                    >
                       Residential Suites
                     </TabsTrigger>
                   </TabsList>
@@ -923,7 +982,7 @@ export default function ReservationPage() {
                         </span>
                         <span className="text-gray-500 ml-4 text-sm">
                           {nights} night{nights > 1 ? "s" : ""} x LKR{" "}
-                          {totalAmount}
+                          {selectedTypeInfo ? selectedTypeInfo.price : 0}
                           /night
                         </span>
                       </div>
@@ -997,7 +1056,7 @@ export default function ReservationPage() {
                     </form>
                   </TabsContent>
                   <TabsContent value="residential">
-                    <>
+                    {hasResidentialSuite ? (
                       <form
                         onSubmit={handleResidentialSubmit}
                         className="space-y-6"
@@ -1104,6 +1163,28 @@ export default function ReservationPage() {
                           <h3 className="text-lg font-semibold">
                             Residential Suite Details
                           </h3>
+                          <div className="space-y-2">
+                            <Label>Residential Suite Room *</Label>
+                            <Select
+                              value={selectedResidentialRoomId}
+                              onValueChange={setSelectedResidentialRoomId}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select suite room" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {residentialSuites.map((room: any) => (
+                                  <SelectItem
+                                    key={room.id}
+                                    value={room.id.toString()}
+                                  >
+                                    Room {room.number} (LKR {room.pricePerNight}
+                                    /night)
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label>Duration Type *</Label>
@@ -1265,11 +1346,7 @@ export default function ReservationPage() {
                               ? "month(s)"
                               : ""}{" "}
                             x LKR
-                            {residentialForm.durationType === "week"
-                              ? RESIDENTIAL_WEEKLY_RATE
-                              : residentialForm.durationType === "month"
-                              ? RESIDENTIAL_MONTHLY_RATE
-                              : ""}
+                            {residentialSuitePrice} per night
                           </span>
                         </div>
                         <div className="space-y-4">
@@ -1326,9 +1403,7 @@ export default function ReservationPage() {
                         <Button
                           type="submit"
                           className="w-full bg-green-600 hover:bg-green-700"
-                          disabled={
-                            isLoading || !selectedRoomType || !selectedRoomId
-                          }
+                          disabled={isLoading || !selectedResidentialRoomId}
                         >
                           {isLoading ? (
                             <>
@@ -1340,7 +1415,14 @@ export default function ReservationPage() {
                           )}
                         </Button>
                       </form>
-                    </>
+                    ) : (
+                      <div className="text-center py-24 text-gray-400 text-lg">
+                        <AlertTriangle className="mx-auto mb-3" size={40} />
+                        <span>
+                          No Residential Suites available for this hotel.
+                        </span>
+                      </div>
+                    )}
                   </TabsContent>
                 </Tabs>
               )}
