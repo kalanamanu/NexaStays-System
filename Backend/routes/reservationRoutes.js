@@ -15,6 +15,8 @@ router.post("/clerk", authenticateClerkToken, reservationController.createClerkR
 router.post("/walkin", authenticateClerkToken, reservationController.createWalkInReservation);
 router.patch("/checkin", authenticateClerkToken, reservationController.checkinReservation);
 router.post("/checkout", authenticateClerkToken, reservationController.checkoutReservation);
+router.put("/:id/clerk-update-departure", authenticateClerkToken, reservationController.clerkUpdateDeparture);
+router.put("/:id/clerk-cancel", authenticateClerkToken, reservationController.clerkCancelReservation);
 
 // Customer routes
 router.post("/", authenticateToken, reservationController.createReservation);

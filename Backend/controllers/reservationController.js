@@ -904,6 +904,86 @@ async function createWalkInReservation(req, res) {
     }
 }
 
+// Clerk can update ONLY departure date and backend will recalculate totalAmount
+async function clerkUpdateDeparture(req, res) {
+    const reservationId = Number(req.params.id);
+    const { departureDate } = req.body;
+
+    if (!departureDate) {
+        return res.status(400).json({ error: "Departure date is required." });
+    }
+
+    try {
+        const reservation = await prisma.reservation.findUnique({
+            where: { id: reservationId },
+            include: { room: true }
+        });
+
+        if (!reservation) {
+            return res.status(404).json({ error: "Reservation not found." });
+        }
+        const arrival = new Date(reservation.arrivalDate);
+        const departure = new Date(departureDate);
+
+        const nights = Math.max(
+            1,
+            Math.ceil((departure - arrival) / (1000 * 60 * 60 * 24))
+        );
+
+        let totalAmount = reservation.totalAmount;
+        const pricePerNight = reservation.room?.pricePerNight || (reservation.totalAmount / (reservation.departureDate ? Math.max(1, Math.ceil((new Date(reservation.departureDate) - arrival) / (1000 * 60 * 60 * 24))) : nights));
+        totalAmount = pricePerNight * nights;
+
+        const updated = await prisma.reservation.update({
+            where: { id: reservationId },
+            data: {
+                departureDate: new Date(departureDate),
+                totalAmount,
+            }
+        });
+
+        res.json({ success: true, totalAmount: updated.totalAmount, reservation: updated });
+    } catch (err) {
+        console.error("clerkUpdateDeparture error:", err);
+        res.status(500).json({ error: "Failed to update departure date." });
+    }
+}
+
+// Clerk can cancel (mark as cancelled) any reservation
+async function clerkCancelReservation(req, res) {
+    const reservationId = Number(req.params.id);
+    if (!reservationId) {
+        return res.status(400).json({ error: "Reservation ID is required." });
+    }
+
+    try {
+        const reservation = await prisma.reservation.findUnique({
+            where: { id: reservationId },
+        });
+        if (!reservation) {
+            return res.status(404).json({ error: "Reservation not found." });
+        }
+        const updated = await prisma.reservation.update({
+            where: { id: reservationId },
+            data: {
+                status: "cancelled",
+                cancelledAt: new Date(),
+                updatedAt: new Date(),
+            },
+        });
+        if (reservation.roomId) {
+            await prisma.room.update({
+                where: { id: reservation.roomId },
+                data: { status: "available" },
+            });
+        }
+        res.json({ success: true, reservation: updated });
+    } catch (err) {
+        console.error("clerkCancelReservation error:", err);
+        res.status(500).json({ error: "Failed to cancel reservation." });
+    }
+}
+
 module.exports = {
     createReservation,
     createResidentialReservation,
@@ -918,5 +998,7 @@ module.exports = {
     getReservationReceipt,
     markReservationNotified,
     getAllReservations,
-    createWalkInReservation
+    createWalkInReservation,
+    clerkUpdateDeparture,
+    clerkCancelReservation
 };
