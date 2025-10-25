@@ -228,7 +228,7 @@ export default function HomePage() {
                   icon: Hotel,
                   title: "Premium Locations",
                   description:
-                    "Prime locations in major cities worldwide with breathtaking views and easy access to attractions",
+                    "Prime locations in major cities islandwide with breathtaking views and easy access to attractions",
                   gradient: "from-purple-500 to-pink-500",
                 },
                 {
