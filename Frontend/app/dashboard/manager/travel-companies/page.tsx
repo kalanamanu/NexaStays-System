@@ -2,7 +2,13 @@
 import { useEffect, useState } from "react";
 import NavBar from "@/components/nav-bar";
 import ManagerSidebar from "@/components/ui/ManagerSidebar";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
 import {
   Select,
   SelectTrigger,
@@ -12,12 +18,17 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DownloadCloud,
   Calendar as CalendarIcon,
   Briefcase,
   CheckCircle2,
   XCircle,
+  AlertCircle,
+  Users2,
+  DollarSign,
+  Hotel,
 } from "lucide-react";
 
 interface Hotel {
@@ -52,6 +63,20 @@ function getDefaultDates() {
     from: firstDay.toISOString().slice(0, 10),
     to: lastDay.toISOString().slice(0, 10),
   };
+}
+
+function formatDisplayDate(iso: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 function exportCsv(bookings: BlockBooking[], hotelName: string) {
@@ -113,33 +138,35 @@ export default function TravelCompanyBookingsPage() {
     fetchHotels();
   }, []);
 
-  useEffect(() => {
-    async function fetchBookings() {
-      if (!selectedHotel) {
-        setBlockBookings([]);
-        setHotelName("");
-        return;
-      }
-      setLoading(true);
-      try {
-        const token = localStorage.getItem("token");
-        const url = `http://localhost:5000/api/manager/travel-companies/block-bookings?hotelId=${selectedHotel}&from=${from}&to=${to}`;
-        const res = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        });
-        const data = await res.json();
-        setBlockBookings(data.blockBookings || []);
-        const h = hotels.find((h) => String(h.id) === String(selectedHotel));
-        setHotelName(h ? h.name : "");
-      } catch (e) {
-        setBlockBookings([]);
-      } finally {
-        setLoading(false);
-      }
+  // Move fetchBookings to component scope
+  async function fetchBookings() {
+    if (!selectedHotel) {
+      setBlockBookings([]);
+      setHotelName("");
+      return;
     }
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const url = `http://localhost:5000/api/manager/travel-companies/block-bookings?hotelId=${selectedHotel}&from=${from}&to=${to}`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      const data = await res.json();
+      setBlockBookings(data.blockBookings || []);
+      const h = hotels.find((h) => String(h.id) === String(selectedHotel));
+      setHotelName(h ? h.name : "");
+    } catch (e) {
+      setBlockBookings([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
     fetchBookings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedHotel, hotels, from, to]);
@@ -191,244 +218,356 @@ export default function TravelCompanyBookingsPage() {
   const totalAmount = blockBookings
     .filter((b) => b.status === "reserved")
     .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-  const hotelsWithBookings = Array.from(
-    new Set(blockBookings.map((b) => b.hotel?.name))
-  ).length;
 
-  function fetchBookings() {
-    setLoading(true);
-    const token = localStorage.getItem("token");
-    const url = `http://localhost:5000/api/manager/travel-companies/block-bookings?hotelId=${selectedHotel}&from=${from}&to=${to}`;
-    fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        setBlockBookings(data.blockBookings || []);
-        setLoading(false);
-      });
-  }
+  // Status badge color
+  const getStatusBadge = (status: string) => {
+    if (status === "reserved") return "bg-green-100 text-green-800";
+    if (status === "rejected") return "bg-red-100 text-red-800";
+    return "bg-yellow-100 text-yellow-800";
+  };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-white">
       <NavBar />
       <ManagerSidebar />
-      <main className="ml-60 pt-16 min-h-screen overflow-y-auto">
-        <div className="max-w-6xl mx-auto py-8 px-4">
-          <Card className="shadow-lg">
-            <CardHeader>
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Briefcase className="h-6 w-6 text-yellow-700" />
-                    Travel Company Block Bookings
-                  </CardTitle>
-                  <div className="text-gray-500 text-sm mt-1">
-                    Approve or reject company block bookings and view reports.
+      <main className="ml-60 pt-16 min-h-screen">
+        <div className="max-w-7xl mx-auto py-8 px-6 lg:px-8">
+          {/* Header Section */}
+          <div className="mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+                  <Briefcase className="h-8 w-8 text-yellow-700" />
+                  Travel Company Block Bookings
+                </h1>
+                <p className="text-gray-600">
+                  Approve, reject, and export company block bookings for your
+                  hotels.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="border-yellow-500 text-yellow-700 hover:bg-yellow-50"
+                  disabled={!blockBookings.length}
+                  onClick={() => exportCsv(blockBookings, hotelName)}
+                >
+                  <DownloadCloud className="h-4 w-4 mr-2" />
+                  Export CSV
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Controls Section */}
+          <Card className="shadow-lg border-0 mb-8 bg-white">
+            <CardContent className="p-6">
+              <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center">
+                <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <Hotel className="h-4 w-4" />
+                      Select Hotel
+                    </label>
+                    <Select
+                      value={String(selectedHotel)}
+                      onValueChange={setSelectedHotel}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Choose a hotel..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {hotels.map((h) => (
+                          <SelectItem key={h.id} value={String(h.id)}>
+                            {h.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-                <div className="flex flex-col md:flex-row gap-2 mt-4 md:mt-0">
-                  <Select
-                    value={String(selectedHotel)}
-                    onValueChange={setSelectedHotel}
-                  >
-                    <SelectTrigger className="min-w-[220px] border-yellow-400">
-                      <SelectValue placeholder="Select Hotel" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {hotels.map((h) => (
-                        <SelectItem key={h.id} value={String(h.id)}>
-                          {h.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="flex gap-2 items-center">
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <label className="flex items-center gap-1 text-xs">
-                        <CalendarIcon className="w-3 h-3" />
-                        From
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <CalendarIcon className="h-4 w-4" />
+                      Date Range
+                    </label>
+                    <div className="flex gap-3">
+                      <div className="flex-1">
                         <input
                           type="date"
-                          className="rounded border px-1 py-0.5 text-xs"
                           value={from}
                           max={to}
                           onChange={(e) => setFrom(e.target.value)}
+                          className="w-full border rounded px-2 py-1"
                         />
-                      </label>
-                      <label className="flex items-center gap-1 text-xs">
-                        <CalendarIcon className="w-3 h-3" />
-                        To
+                      </div>
+                      <div className="flex-1">
                         <input
                           type="date"
-                          className="rounded border px-1 py-0.5 text-xs"
                           value={to}
                           min={from}
                           onChange={(e) => setTo(e.target.value)}
+                          className="w-full border rounded px-2 py-1"
                         />
-                      </label>
+                      </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-yellow-500 shadow ml-2"
-                      disabled={!blockBookings.length}
-                      onClick={() => exportCsv(blockBookings, hotelName)}
-                    >
-                      <DownloadCloud className="w-4 h-4 mr-2" />
-                      Export CSV
-                    </Button>
                   </div>
                 </div>
               </div>
-            </CardHeader>
-            <Separator />
-            <CardContent>
-              {/* KPI Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <Card className="bg-yellow-50 border-yellow-200">
-                  <CardHeader>
-                    <div className="text-xs text-gray-500">
-                      Total Block Bookings
-                    </div>
-                    <div className="text-2xl font-bold">{totalBookings}</div>
-                  </CardHeader>
-                </Card>
-                <Card className="bg-green-50 border-green-200">
-                  <CardHeader>
-                    <div className="text-xs text-gray-500">Approved</div>
-                    <div className="text-2xl font-bold text-green-700">
+            </CardContent>
+          </Card>
+
+          {/* KPI Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+            <Card className="bg-yellow-50 backdrop-blur-sm border-l-4 border-l-yellow-500 shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">
+                      Total Bookings
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {totalBookings}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-yellow-100 rounded-lg">
+                    <Users2 className="h-6 w-6 text-yellow-800" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-green-50 backdrop-blur-sm border-l-4 border-l-green-500 shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">
+                      Approved Bookings
+                    </p>
+                    <p className="text-2xl font-bold text-green-700">
                       {approvedBookings}
-                    </div>
-                  </CardHeader>
-                </Card>
-                <Card className="bg-red-50 border-red-200">
-                  <CardHeader>
-                    <div className="text-xs text-gray-500">Pending</div>
-                    <div className="text-2xl font-bold text-red-600">
+                    </p>
+                  </div>
+                  <div className="p-3 bg-green-100 rounded-lg">
+                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-red-50 backdrop-blur-sm border-l-4 border-l-red-500 shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">
+                      Pending Bookings
+                    </p>
+                    <p className="text-2xl font-bold text-red-600">
                       {pendingBookings}
-                    </div>
-                  </CardHeader>
-                </Card>
-                <Card className="bg-blue-50 border-blue-200">
-                  <CardHeader>
-                    <div className="text-xs text-gray-500">
-                      Total Amount (LKR)
-                    </div>
-                    <div className="text-2xl font-bold text-blue-700">
+                    </p>
+                  </div>
+                  <div className="p-3 bg-red-100 rounded-lg">
+                    <AlertCircle className="h-6 w-6 text-red-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-blue-50 backdrop-blur-sm border-l-4 border-l-blue-500 shadow-lg">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">
+                      Approved Amount (LKR)
+                    </p>
+                    <p className="text-2xl font-bold text-blue-700">
                       {totalAmount.toLocaleString()}
-                    </div>
-                  </CardHeader>
-                </Card>
+                    </p>
+                  </div>
+                  <div className="p-3 bg-blue-100 rounded-lg">
+                    <DollarSign className="h-6 w-6 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Table Section */}
+          <Card className="shadow-lg border-0 bg-white">
+            <CardHeader className="border-b border-gray-200 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <Briefcase className="h-5 w-5 text-yellow-700" />
+                    Block Booking Records
+                  </CardTitle>
+                  <CardDescription>
+                    All block bookings for{" "}
+                    <span className="font-medium">
+                      {hotelName || "selected hotel"}
+                    </span>{" "}
+                    from {from} to {to}
+                  </CardDescription>
+                </div>
+                <Badge
+                  className="bg-yellow-50 text-yellow-700 border-yellow-200"
+                  variant="outline"
+                >
+                  {blockBookings.length} Records
+                </Badge>
               </div>
-              {/* Table Section */}
-              <div className="overflow-x-auto border rounded-lg">
-                <table className="min-w-full border">
-                  <thead className="bg-yellow-50">
-                    <tr>
-                      <th className="px-2 py-1 border">ID</th>
-                      <th className="px-2 py-1 border">Company Name</th>
-                      <th className="px-2 py-1 border">Hotel</th>
-                      <th className="px-2 py-1 border">Arrival</th>
-                      <th className="px-2 py-1 border">Departure</th>
-                      <th className="px-2 py-1 border">Room Types</th>
-                      <th className="px-2 py-1 border">Discount Rate</th>
-                      <th className="px-2 py-1 border">Amount (LKR)</th>
-                      <th className="px-2 py-1 border">Status</th>
-                      <th className="px-2 py-1 border">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {blockBookings.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={10}
-                          className="text-center text-gray-400 py-8"
-                        >
-                          No block bookings found.
-                        </td>
-                      </tr>
-                    ) : (
-                      blockBookings.map((b) => (
-                        <tr key={b.id}>
-                          <td className="px-2 py-1 border">{b.id}</td>
-                          <td className="px-2 py-1 border">
-                            {b.travelCompany?.companyName}
-                          </td>
-                          <td className="px-2 py-1 border">{b.hotel?.name}</td>
-                          <td className="px-2 py-1 border">
-                            {b.arrivalDate?.slice(0, 10)}
-                          </td>
-                          <td className="px-2 py-1 border">
-                            {b.departureDate?.slice(0, 10)}
-                          </td>
-                          <td className="px-2 py-1 border">
-                            {b.roomTypes.map((rt) => (
-                              <div key={rt.id}>
-                                {rt.roomType} x{rt.rooms}
-                              </div>
-                            ))}
-                          </td>
-                          <td className="px-2 py-1 border">
-                            {b.discountRate}%
-                          </td>
-                          <td className="px-2 py-1 border">
-                            {b.totalAmount?.toLocaleString()}
-                          </td>
-                          <td className="px-2 py-1 border">
-                            {b.status === "reserved" ? (
-                              <span className="text-green-800 font-semibold">
-                                Approved
-                              </span>
-                            ) : b.status === "rejected" ? (
-                              <span className="text-red-800 font-semibold">
-                                Rejected
-                              </span>
-                            ) : (
-                              <span className="text-yellow-800 font-semibold">
-                                {b.status}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-2 py-1 border">
-                            {b.status !== "reserved" &&
-                            b.status !== "rejected" ? (
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  className="bg-green-600 text-white"
-                                  onClick={() => approveBooking(b.id)}
-                                >
-                                  <CheckCircle2 className="w-4 h-4 mr-1" />
-                                  Approve
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  className="bg-red-600 text-white"
-                                  onClick={() => rejectBooking(b.id)}
-                                >
-                                  <XCircle className="w-4 h-4 mr-1" />
-                                  Reject
-                                </Button>
-                              </div>
-                            ) : null}
-                          </td>
+            </CardHeader>
+            <CardContent className="p-0">
+              {!selectedHotel && (
+                <div className="py-16 text-center">
+                  <Briefcase className="h-16 w-16 text-yellow-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Select a Hotel
+                  </h3>
+                  <p className="text-gray-500 max-w-md mx-auto">
+                    Choose a hotel from above to view block bookings.
+                  </p>
+                </div>
+              )}
+              {loading && (
+                <div className="py-16 text-center">
+                  <div className="animate-pulse">
+                    <Briefcase className="h-16 w-16 text-yellow-300 mx-auto mb-4" />
+                    <p className="text-gray-600">
+                      Loading block booking records...
+                    </p>
+                  </div>
+                </div>
+              )}
+              {selectedHotel && !loading && (
+                <div>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm rounded-lg overflow-hidden">
+                      <thead className="bg-yellow-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            ID
+                          </th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            Company Name
+                          </th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            Hotel
+                          </th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            Arrival
+                          </th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            Departure
+                          </th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            Room Types
+                          </th>
+                          <th className="px-4 py-2 text-right font-semibold text-gray-700">
+                            Discount Rate
+                          </th>
+                          <th className="px-4 py-2 text-right font-semibold text-gray-700">
+                            Amount (LKR)
+                          </th>
+                          <th className="px-4 py-2 text-center font-semibold text-gray-700">
+                            Status
+                          </th>
+                          <th className="px-4 py-2 text-center font-semibold text-gray-700">
+                            Action
+                          </th>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-6 text-xs text-gray-500 leading-relaxed">
-                <strong>Tip:</strong> Approve or reject block bookings to
-                confirm or decline discounted company reservations. Export
-                booking data above.
-              </div>
+                      </thead>
+                      <tbody>
+                        {blockBookings.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={10}
+                              className="text-center text-gray-400 py-12"
+                            >
+                              <AlertCircle className="inline-block mr-2 h-5 w-5 text-gray-300" />
+                              No block bookings found for selected criteria.
+                            </td>
+                          </tr>
+                        ) : (
+                          blockBookings.map((b) => (
+                            <tr
+                              key={b.id}
+                              className="hover:bg-yellow-50 transition-colors"
+                            >
+                              <td className="px-4 py-2 font-medium text-gray-900">
+                                {b.id}
+                              </td>
+                              <td className="px-4 py-2">
+                                {b.travelCompany?.companyName}
+                              </td>
+                              <td className="px-4 py-2">{b.hotel?.name}</td>
+                              <td className="px-4 py-2">
+                                {formatDisplayDate(b.arrivalDate)}
+                              </td>
+                              <td className="px-4 py-2">
+                                {formatDisplayDate(b.departureDate)}
+                              </td>
+                              <td className="px-4 py-2">
+                                <div className="flex flex-col gap-1">
+                                  {b.roomTypes.map((rt) => (
+                                    <span
+                                      key={rt.id}
+                                      className="bg-yellow-100 text-yellow-800 rounded px-2 py-0.5 text-xs font-medium inline-block"
+                                    >
+                                      {rt.roomType} x{rt.rooms}
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                {b.discountRate}%
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                {b.totalAmount?.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                <Badge className={getStatusBadge(b.status)}>
+                                  {b.status === "reserved"
+                                    ? "Approved"
+                                    : b.status === "rejected"
+                                    ? "Rejected"
+                                    : "Pending"}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                {b.status !== "reserved" &&
+                                b.status !== "rejected" ? (
+                                  <div className="flex gap-2 justify-center">
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      className="bg-green-600 text-white"
+                                      onClick={() => approveBooking(b.id)}
+                                    >
+                                      <CheckCircle2 className="w-4 h-4 mr-1" />
+                                      Approve
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      className="bg-red-600 text-white"
+                                      onClick={() => rejectBooking(b.id)}
+                                    >
+                                      <XCircle className="w-4 h-4 mr-1" />
+                                      Reject
+                                    </Button>
+                                  </div>
+                                ) : null}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-6 text-xs text-gray-500 leading-relaxed">
+                    <strong>Tip:</strong> Approve or reject block bookings to
+                    confirm or decline discounted company reservations. Export
+                    booking data above.
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

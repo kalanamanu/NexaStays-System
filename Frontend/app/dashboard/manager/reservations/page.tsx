@@ -2,7 +2,13 @@
 import { useEffect, useState } from "react";
 import NavBar from "@/components/nav-bar";
 import ManagerSidebar from "@/components/ui/ManagerSidebar";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardDescription,
+} from "@/components/ui/card";
 import {
   Select,
   SelectTrigger,
@@ -12,11 +18,16 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DownloadCloud,
   Calendar as CalendarIcon,
   Search,
   ClipboardList,
+  Filter,
+  User,
+  Bed,
+  AlertCircle,
 } from "lucide-react";
 
 interface Hotel {
@@ -46,6 +57,20 @@ function getDefaultDates() {
   };
 }
 
+function formatDisplayDate(iso: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function exportCsv(reservations: Reservation[], hotelName: string) {
   if (!reservations.length) return;
   const header = [
@@ -63,8 +88,8 @@ function exportCsv(reservations: Reservation[], hotelName: string) {
     r.guestName || "",
     r.roomNumber || "",
     r.roomType || "",
-    r.arrivalDate,
-    r.departureDate,
+    formatDisplayDate(r.arrivalDate),
+    formatDisplayDate(r.departureDate),
     r.totalAmount,
     r.status,
   ]);
@@ -153,144 +178,210 @@ export default function ManagerReservationHistoryPage() {
   });
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
       <NavBar />
       <ManagerSidebar />
-      <main className="ml-60 pt-16 min-h-screen overflow-y-auto">
-        <div className="max-w-6xl mx-auto py-8 px-4">
-          <Card className="shadow-lg">
-            <CardHeader>
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <ClipboardList className="h-6 w-6 text-indigo-600" />
-                    Reservation History
-                  </CardTitle>
-                  <div className="text-gray-500 text-sm mt-1">
-                    Search, filter, and view hotel reservations.
+      <main className="ml-60 pt-16 min-h-screen">
+        <div className="max-w-7xl mx-auto py-8 px-6 lg:px-8">
+          {/* Header Section */}
+          <div className="mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+                  <ClipboardList className="h-8 w-8 text-indigo-600" />
+                  Reservation History
+                </h1>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Search, filter, and export hotel reservation records.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="border-indigo-500 text-indigo-600 hover:bg-indigo-50"
+                  disabled={!filteredReservations.length}
+                  onClick={() => exportCsv(filteredReservations, hotelName)}
+                >
+                  <DownloadCloud className="h-4 w-4 mr-2" />
+                  Export CSV
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Controls Section */}
+          <Card className="shadow-lg border-0 mb-8">
+            <CardContent className="p-6">
+              <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center">
+                <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <Bed className="h-4 w-4" />
+                      Select Hotel
+                    </label>
+                    <Select
+                      value={String(selectedHotel)}
+                      onValueChange={setSelectedHotel}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Choose a hotel..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {hotels.map((h) => (
+                          <SelectItem key={h.id} value={String(h.id)}>
+                            {h.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-                <div className="flex flex-col md:flex-row gap-2 mt-4 md:mt-0">
-                  <Select
-                    value={String(selectedHotel)}
-                    onValueChange={setSelectedHotel}
-                  >
-                    <SelectTrigger className="min-w-[220px] border-indigo-400">
-                      <SelectValue placeholder="Select Hotel" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {hotels.map((h) => (
-                        <SelectItem key={h.id} value={String(h.id)}>
-                          {h.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="flex gap-2 items-center">
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <label className="flex items-center gap-1 text-xs">
-                        <CalendarIcon className="w-3 h-3" />
-                        From
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <CalendarIcon className="h-4 w-4" />
+                      Date Range
+                    </label>
+                    <div className="flex gap-3">
+                      <div className="flex-1">
                         <input
                           type="date"
-                          className="rounded border px-1 py-0.5 text-xs"
                           value={from}
                           max={to}
                           onChange={(e) => setFrom(e.target.value)}
+                          className="w-full border rounded px-2 py-1"
                         />
-                      </label>
-                      <label className="flex items-center gap-1 text-xs">
-                        <CalendarIcon className="w-3 h-3" />
-                        To
+                      </div>
+                      <div className="flex-1">
                         <input
                           type="date"
-                          className="rounded border px-1 py-0.5 text-xs"
                           value={to}
                           min={from}
                           onChange={(e) => setTo(e.target.value)}
+                          className="w-full border rounded px-2 py-1"
                         />
-                      </label>
+                      </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-indigo-500 shadow ml-2"
-                      disabled={!filteredReservations.length}
-                      onClick={() => exportCsv(filteredReservations, hotelName)}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 mt-4 lg:mt-0">
+                  <div className="flex gap-2 items-center">
+                    <Search className="w-4 h-4 text-gray-500" />
+                    <input
+                      type="text"
+                      className="border rounded px-2 py-1 text-sm w-40"
+                      placeholder="Search guest name/email..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Filter className="w-4 h-4 text-gray-500" />
+                    <select
+                      className="border rounded px-2 py-1 text-sm w-32"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
                     >
-                      <DownloadCloud className="w-4 h-4 mr-2" />
-                      Export CSV
-                    </Button>
+                      <option value="">All Status</option>
+                      <option value="reserved">Reserved</option>
+                      <option value="checked-in">Checked-In</option>
+                      <option value="checked-out">Checked-Out</option>
+                      <option value="paid">Paid</option>
+                      <option value="pending">Pending</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <User className="w-4 h-4 text-gray-500" />
+                    <input
+                      type="text"
+                      className="border rounded px-2 py-1 text-sm w-28"
+                      placeholder="Room number..."
+                      value={roomFilter}
+                      onChange={(e) => setRoomFilter(e.target.value)}
+                    />
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Reservation Table Section */}
+          <Card className="shadow-lg border-0">
+            <CardHeader className="border-b border-gray-200 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <ClipboardList className="h-5 w-5 text-indigo-600" />
+                    Reservation Records
+                  </CardTitle>
+                  <CardDescription>
+                    All reservations for{" "}
+                    <span className="font-medium">
+                      {hotelName || "selected hotel"}
+                    </span>{" "}
+                    from {formatDisplayDate(from)} to {formatDisplayDate(to)}
+                  </CardDescription>
+                </div>
+                <Badge
+                  className="bg-indigo-50 text-indigo-700 border-indigo-200"
+                  variant="outline"
+                >
+                  {filteredReservations.length} Records
+                </Badge>
+              </div>
             </CardHeader>
-            <Separator />
-            <CardContent>
+            <CardContent className="p-0">
               {!selectedHotel && (
-                <div className="text-gray-500 text-center py-12">
-                  Select a hotel to view reservations.
+                <div className="py-16 text-center">
+                  <Bed className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Select a Hotel
+                  </h3>
+                  <p className="text-gray-500 max-w-md mx-auto">
+                    Choose a hotel from above to view reservation history.
+                  </p>
                 </div>
               )}
               {loading && (
-                <div className="text-center py-8 animate-pulse">
-                  Loading reservations...
+                <div className="py-16 text-center">
+                  <div className="animate-pulse">
+                    <ClipboardList className="h-16 w-16 text-indigo-300 mx-auto mb-4" />
+                    <p className="text-gray-600">
+                      Loading reservation records...
+                    </p>
+                  </div>
                 </div>
               )}
               {selectedHotel && !loading && (
                 <div>
-                  {/* Filter Section */}
-                  <div className="flex flex-col md:flex-row gap-4 mb-4 items-center">
-                    <div className="flex items-center gap-2">
-                      <Search className="w-4 h-4 text-gray-500" />
-                      <input
-                        type="text"
-                        className="border rounded px-2 py-1 text-sm"
-                        placeholder="Search guest name or email..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-gray-700">Status</label>
-                      <select
-                        className="border rounded px-2 py-1 text-sm"
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                      >
-                        <option value="">All</option>
-                        <option value="reserved">Reserved</option>
-                        <option value="checked-in">Checked-In</option>
-                        <option value="checked-out">Checked-Out</option>
-                        <option value="paid">Paid</option>
-                        <option value="pending">Pending</option>
-                        <option value="cancelled">Cancelled</option>
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-gray-700">Room</label>
-                      <input
-                        type="text"
-                        className="border rounded px-2 py-1 text-sm"
-                        placeholder="Room number..."
-                        value={roomFilter}
-                        onChange={(e) => setRoomFilter(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  {/* Table Section */}
-                  <div className="overflow-x-auto border rounded-lg">
-                    <table className="min-w-full border">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm rounded-lg overflow-hidden">
                       <thead className="bg-indigo-50">
                         <tr>
-                          <th className="px-2 py-1 border">ID</th>
-                          <th className="px-2 py-1 border">Guest Name</th>
-                          <th className="px-2 py-1 border">Room Number</th>
-                          <th className="px-2 py-1 border">Room Type</th>
-                          <th className="px-2 py-1 border">Arrival</th>
-                          <th className="px-2 py-1 border">Departure</th>
-                          <th className="px-2 py-1 border">Amount (LKR)</th>
-                          <th className="px-2 py-1 border">Status</th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            ID
+                          </th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            Guest Name
+                          </th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            Room
+                          </th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            Type
+                          </th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            Arrival
+                          </th>
+                          <th className="px-4 py-2 text-left font-semibold text-gray-700">
+                            Departure
+                          </th>
+                          <th className="px-4 py-2 text-right font-semibold text-gray-700">
+                            Amount (LKR)
+                          </th>
+                          <th className="px-4 py-2 text-center font-semibold text-gray-700">
+                            Status
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -298,32 +389,60 @@ export default function ManagerReservationHistoryPage() {
                           <tr>
                             <td
                               colSpan={8}
-                              className="text-center text-gray-400 py-8"
+                              className="text-center text-gray-400 py-12"
                             >
-                              No reservations found.
+                              <AlertCircle className="inline-block mr-2 h-5 w-5 text-gray-300" />
+                              No reservations found for selected criteria.
                             </td>
                           </tr>
                         ) : (
                           filteredReservations.map((r) => (
-                            <tr key={r.id}>
-                              <td className="px-2 py-1 border">{r.id}</td>
-                              <td className="px-2 py-1 border">
-                                {r.guestName}
+                            <tr
+                              key={r.id}
+                              className="hover:bg-indigo-50 transition-colors"
+                            >
+                              <td className="px-4 py-2 font-medium text-gray-900">
+                                {r.id}
                               </td>
-                              <td className="px-2 py-1 border">
-                                {r.roomNumber}
+                              <td className="px-4 py-2">
+                                <div>{r.guestName}</div>
+                                <div className="text-xs text-gray-500">
+                                  {r.guestEmail}
+                                </div>
                               </td>
-                              <td className="px-2 py-1 border">{r.roomType}</td>
-                              <td className="px-2 py-1 border">
-                                {r.arrivalDate}
+                              <td className="px-4 py-2">{r.roomNumber}</td>
+                              <td className="px-4 py-2">{r.roomType}</td>
+                              <td className="px-4 py-2">
+                                {formatDisplayDate(r.arrivalDate)}
                               </td>
-                              <td className="px-2 py-1 border">
-                                {r.departureDate}
+                              <td className="px-4 py-2">
+                                {formatDisplayDate(r.departureDate)}
                               </td>
-                              <td className="px-2 py-1 border">
+                              <td className="px-4 py-2 text-right">
                                 {r.totalAmount?.toLocaleString()}
                               </td>
-                              <td className="px-2 py-1 border">{r.status}</td>
+                              <td className="px-4 py-2 text-center">
+                                <Badge
+                                  className={
+                                    r.status === "reserved"
+                                      ? "bg-blue-100 text-blue-700"
+                                      : r.status === "checked-in"
+                                      ? "bg-green-100 text-green-700"
+                                      : r.status === "checked-out"
+                                      ? "bg-purple-100 text-purple-800"
+                                      : r.status === "paid"
+                                      ? "bg-indigo-100 text-indigo-700"
+                                      : r.status === "pending"
+                                      ? "bg-yellow-100 text-yellow-700"
+                                      : r.status === "cancelled"
+                                      ? "bg-red-100 text-red-700"
+                                      : ""
+                                  }
+                                >
+                                  {r.status.charAt(0).toUpperCase() +
+                                    r.status.slice(1)}
+                                </Badge>
+                              </td>
                             </tr>
                           ))
                         )}
@@ -331,9 +450,9 @@ export default function ManagerReservationHistoryPage() {
                     </table>
                   </div>
                   <div className="mt-6 text-xs text-gray-500 leading-relaxed">
-                    <strong>Tip:</strong> Use the filters to find reservations
-                    by guest, status, or room number. Export the results with
-                    the button above.
+                    <strong>Tip:</strong> Use filters to find reservations by
+                    guest, status or room. Export filtered results with the
+                    button above.
                   </div>
                 </div>
               )}

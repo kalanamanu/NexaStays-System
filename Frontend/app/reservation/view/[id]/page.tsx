@@ -155,7 +155,7 @@ export default function ViewReservationPage() {
                 <div>
                   <Label>Total Amount:</Label>
                   <div className="mt-1 font-bold text-green-700 dark:text-green-300">
-                    ${reservation.totalAmount}
+                    LKR {reservation.totalAmount}
                   </div>
                 </div>
                 <div>

@@ -35,6 +35,7 @@ interface RoomTypeOption {
   label: string;
   price?: number;
   available: number;
+  total: number;
 }
 
 interface SelectedType {
@@ -42,6 +43,7 @@ interface SelectedType {
   label: string;
   price?: number;
   available: number;
+  total: number;
   rooms: number;
 }
 
@@ -101,7 +103,6 @@ export default function CreateBlockBookingPage() {
       setFormData((prev) => ({ ...prev, roomTypeSelections: [] }));
       return;
     }
-
     async function fetchRoomTypes() {
       setLoadingRooms(true);
       try {
@@ -109,24 +110,27 @@ export default function CreateBlockBookingPage() {
           `http://localhost:5000/api/hotels/${formData.hotelId}`
         );
         const data = await res.json();
-        // Deduplicate room types and get count (availability)
         const roomsArr = data.data?.rooms || [];
         const typeMap: Record<string, RoomTypeOption> = {};
         roomsArr.forEach((room: any) => {
-          // Use the original casing for display but lower-case for the key
           const typeKey = room.type.trim().toLowerCase();
           if (!typeMap[typeKey]) {
             typeMap[typeKey] = {
               type: typeKey,
               label: room.type.trim(),
               price: room.pricePerNight,
-              available: 1,
+              available: room.status === "available" ? 1 : 0,
+              total: 1,
             };
           } else {
-            typeMap[typeKey].available += 1;
+            typeMap[typeKey].total += 1;
+            if (room.status === "available") typeMap[typeKey].available += 1;
           }
         });
-        const dedupedTypes = Object.values(typeMap);
+        // Show only room types with available > 0, and display "Available: X from Y"
+        const dedupedTypes = Object.values(typeMap).filter(
+          (rt) => rt.available > 0
+        );
         setRoomTypes(dedupedTypes);
         setFormData((prev) => ({
           ...prev,
@@ -149,8 +153,8 @@ export default function CreateBlockBookingPage() {
     setFormData((prev) => {
       const prevSelections = prev.roomTypeSelections;
       const idx = prevSelections.findIndex((rt) => rt.type === typeKey);
+      const roomTypeMeta = roomTypes.find((rt) => rt.type === typeKey);
       if (rooms === 0) {
-        // Remove selection
         return {
           ...prev,
           roomTypeSelections: prevSelections.filter(
@@ -158,12 +162,12 @@ export default function CreateBlockBookingPage() {
           ),
         };
       }
-      const roomTypeMeta = roomTypes.find((rt) => rt.type === typeKey);
       const newSelection: SelectedType = {
         type: typeKey,
         label: roomTypeMeta?.label || type,
         price: roomTypeMeta?.price,
         available: roomTypeMeta?.available || 0,
+        total: roomTypeMeta?.total || 0,
         rooms,
       };
       if (idx === -1) {
@@ -182,7 +186,6 @@ export default function CreateBlockBookingPage() {
         };
       }
     });
-    // Clear errors for this type
     setErrors((prev) => ({ ...prev, [`roomType_${typeKey}`]: "" }));
   };
 
@@ -193,7 +196,7 @@ export default function CreateBlockBookingPage() {
     }
   };
 
-  // Validate form (must have hotel, at least 3 rooms, at least one room type, dates, discount, etc)
+  // Validate form
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.hotelId) newErrors.hotelId = "Hotel is required";
@@ -210,7 +213,6 @@ export default function CreateBlockBookingPage() {
       newErrors.discountRate = "Discount rate cannot be negative";
     if (formData.discountRate > 50)
       newErrors.discountRate = "Discount cannot exceed 50%";
-    // At least one room type and at least 3 rooms total
     const totalRooms = formData.roomTypeSelections.reduce(
       (sum, r) => sum + r.rooms,
       0
@@ -220,7 +222,6 @@ export default function CreateBlockBookingPage() {
     if (totalRooms < 3)
       newErrors.roomTypeSelections =
         "Minimum 3 rooms required for block booking";
-    // Validate no negative or more than available
     for (const sel of formData.roomTypeSelections) {
       if (sel.rooms < 0)
         newErrors[`roomType_${sel.type}`] = "Rooms cannot be negative";
@@ -239,7 +240,6 @@ export default function CreateBlockBookingPage() {
       formData.roomTypeSelections.length === 0
     )
       return 0;
-
     const nights = Math.ceil(
       (formData.departureDate.getTime() - formData.arrivalDate.getTime()) /
         (1000 * 60 * 60 * 24)
@@ -253,7 +253,6 @@ export default function CreateBlockBookingPage() {
     return sum - discountAmount;
   };
 
-  // Calculate total price before discount
   const calculateTotalBeforeDiscount = () => {
     if (
       !formData.arrivalDate ||
@@ -261,7 +260,6 @@ export default function CreateBlockBookingPage() {
       formData.roomTypeSelections.length === 0
     )
       return 0;
-
     const nights = Math.ceil(
       (formData.departureDate.getTime() - formData.arrivalDate.getTime()) /
         (1000 * 60 * 60 * 24)
@@ -395,7 +393,7 @@ export default function CreateBlockBookingPage() {
                   </div>
                 ) : roomTypes.length === 0 ? (
                   <div className="text-sm text-gray-500">
-                    No room types found for this hotel.
+                    No available room types for this hotel.
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -405,7 +403,8 @@ export default function CreateBlockBookingPage() {
                           {rt.label}
                         </span>
                         <span className="text-xs text-gray-500">
-                          (Available: {rt.available}, Rate: LKR {rt.price})
+                          (Available: {rt.available} from {rt.total}, Rate: LKR{" "}
+                          {rt.price})
                         </span>
                         <Input
                           type="number"
