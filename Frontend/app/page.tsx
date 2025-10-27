@@ -160,7 +160,7 @@ export default function HomePage() {
           </p>
           <div className="flex gap-4 mt-3">
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
-              <Link href="/reservation">
+              <Link href="/hotels">
                 <Button
                   className="px-7 py-3 text-base font-bold rounded-xl
                   bg-gradient-to-r from-purple-500 to-indigo-500
